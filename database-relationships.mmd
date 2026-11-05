@@ -1,0 +1,128 @@
+erDiagram
+  USER ||--o{ PRODUCT : "owns"
+  USER ||--o{ DOCUMENT : "uploads"
+  USER ||--o{ DEADLINE : "schedules"
+  USER ||--o{ REPAIR : "logs"
+  USER ||--o{ NOTIFICATION : "receives"
+  USER ||--o{ AI_CONVERSATION : "initiates"
+
+  PRODUCT ||--o{ DOCUMENT : "attaches"
+  PRODUCT ||--o{ DEADLINE : "tracks"
+  PRODUCT ||--o{ REPAIR : "has_history"
+
+  REPAIR ||--o| DOCUMENT : "attaches_receipt"
+  AI_CONVERSATION ||--o{ AI_MESSAGE : "contains"
+
+  USER {
+    ObjectId _id PK
+    string email UK "Indexed unique email"
+    string passwordHash "Bcrypt hashed password"
+    string fullName "Display name"
+    string preferredCurrency "Default currency: USD, INR, EUR, etc."
+    object notificationPreferences "Email and in-app alert flags"
+    date createdAt "Creation timestamp"
+    date updatedAt "Update timestamp"
+  }
+
+  PRODUCT {
+    ObjectId _id PK
+    ObjectId userId FK "Indexed owner user ID"
+    string name "Product name"
+    string brand "Brand or manufacturer"
+    string category "Electronics, Appliances, Furniture, etc."
+    string model "Model number or identifier"
+    string serialNumber "Serial or VIN"
+    date purchaseDate "Verified purchase date"
+    number purchasePrice "Purchase price amount"
+    string currency "ISO currency code"
+    string retailer "Seller / store name"
+    string description "Optional notes"
+    string imageUrl "Stored image path or URL"
+    date warrantyStartDate "Warranty commencement date"
+    date warrantyExpiryDate "Warranty expiration date"
+    date returnDeadline "Return window deadline"
+    string status "active, retired, disposed, returned"
+    date createdAt "Creation timestamp"
+    date updatedAt "Update timestamp"
+  }
+
+  DOCUMENT {
+    ObjectId _id PK
+    ObjectId userId FK "Indexed owner user ID"
+    ObjectId productId FK "Optional associated product ID"
+    string fileName "Stored file name (UUID-based)"
+    string originalName "Original uploaded file name"
+    string fileType "invoice, warranty, manual, receipt, service, other"
+    string mimeType "application/pdf, image/jpeg, etc."
+    number fileSize "File size in bytes"
+    string storageKey "Storage path or bucket key"
+    string extractionStatus "pending, processing, review_required, confirmed, failed"
+    object rawOcrData "Raw extraction payload"
+    object suggestedFields "Normalized suggested product/deadline fields"
+    date confirmedAt "Timestamp when user confirmed data"
+    date createdAt "Creation timestamp"
+    date updatedAt "Update timestamp"
+  }
+
+  DEADLINE {
+    ObjectId _id PK
+    ObjectId userId FK "Indexed owner user ID"
+    ObjectId productId FK "Associated product ID"
+    string title "Deadline title"
+    string deadlineType "warranty_expiry, return_window, maintenance, custom"
+    date dueDate "Actual deadline date"
+    array reminderDaysBefore "Array of days before due"
+    string status "pending, completed, dismissed, overdue"
+    string source "manual, confirmed_extraction"
+    boolean isConfirmed "Explicit confirmation flag"
+    date lastNotifiedAt "Timestamp of last notification sent"
+    date createdAt "Creation timestamp"
+    date updatedAt "Update timestamp"
+  }
+
+  REPAIR {
+    ObjectId _id PK
+    ObjectId userId FK "Indexed owner user ID"
+    ObjectId productId FK "Associated product ID"
+    date repairDate "Date service occurred"
+    string serviceCenter "Name of repair facility"
+    string issueDescription "Reported problem"
+    string workPerformed "Actions taken by technician"
+    number cost "Cost amount (non-negative)"
+    string currency "ISO currency code"
+    string status "completed, in_progress, pending"
+    ObjectId documentId FK "Optional attached receipt or service sheet"
+    date createdAt "Creation timestamp"
+    date updatedAt "Update timestamp"
+  }
+
+  NOTIFICATION {
+    ObjectId _id PK
+    ObjectId userId FK "Indexed recipient user ID"
+    ObjectId deadlineId FK "Optional referenced deadline ID"
+    ObjectId productId FK "Optional referenced product ID"
+    string type "deadline_reminder, warranty_warning, extraction_ready, system"
+    string title "Notification title"
+    string message "Human-readable message body"
+    boolean isRead "Read status boolean"
+    date readAt "Timestamp when read"
+    date createdAt "Creation timestamp"
+  }
+
+  AI_CONVERSATION {
+    ObjectId _id PK
+    ObjectId userId FK "Indexed owner user ID"
+    string title "Conversation subject summary"
+    date createdAt "Creation timestamp"
+    date updatedAt "Update timestamp"
+  }
+
+  AI_MESSAGE {
+    ObjectId _id PK
+    ObjectId conversationId FK "Parent conversation ID"
+    string role "user, assistant, system"
+    string content "Message text content"
+    array citedProductIds "Referenced products"
+    array citedDocumentIds "Referenced documents"
+    date createdAt "Creation timestamp"
+  }
