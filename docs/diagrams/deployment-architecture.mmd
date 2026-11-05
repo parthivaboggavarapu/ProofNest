@@ -1,0 +1,53 @@
+flowchart TB
+  subgraph PublicInternet["Public Internet & Users"]
+    DesktopUser["Desktop Browser"]
+    MobileUser["Mobile Browser"]
+  end
+
+  subgraph EdgeLayer["Edge & DNS Layer"]
+    Cloudflare["Cloudflare / CDN & DNS (TLS 1.3 Termination, DDoS Shield)"]
+  end
+
+  subgraph FrontendHosting["Frontend Static Hosting (Vercel / Netlify / S3 Static)"]
+    SPABundle["Vite React SPA Build (HTML, JS, CSS, Assets)"]
+  end
+
+  subgraph BackendPaaS["Backend Application Platform (Render / Railway / Docker PaaS)"]
+    ReverseProxy["Reverse Proxy / Nginx"]
+    NodeAPI["Node.js Express App Cluster (PM2 / Docker Containers)"]
+    CronWorker["Scheduled Jobs Worker (Node-cron Worker)"]
+    ReverseProxy --> NodeAPI
+    NodeAPI --- CronWorker
+  end
+
+  subgraph ManagedServices["Cloud Managed Services Layer"]
+    subgraph DatabaseService["Managed Database"]
+      Atlas[("MongoDB Atlas Primary + Secondary Replica Set")]
+      AtlasBackup[("Automated Daily Snapshots")]
+      Atlas --> AtlasBackup
+    end
+
+    subgraph ObjectStorage["Encrypted Object Storage"]
+      S3Storage[("AWS S3 / Cloudflare R2 (Private Bucket, SSE-S3)")]
+    end
+
+    subgraph ExternalAPIs["Third-Party AI & Auxiliary Services"]
+      OcrAPI["OCR Provider API (Cloud Vision / Textract)"]
+      LlmAPI["LLM Provider API (OpenAI / Anthropic Compatible)"]
+      SmtpGateway["Transactional Email Service (SendGrid / Postmark)"]
+    end
+  end
+
+  %% Connections
+  DesktopUser --> Cloudflare
+  MobileUser --> Cloudflare
+
+  Cloudflare -- "Static Web Requests (/)" --> FrontendHosting
+  Cloudflare -- "API Requests (/api/*)" --> ReverseProxy
+
+  NodeAPI -- "Mongoose Driver (TLS, Auth)" --> Atlas
+  NodeAPI -- "Private Signed Upload / Stream" --> S3Storage
+  NodeAPI -- "Document Extraction Request" --> OcrAPI
+  NodeAPI -- "Grounded AI Chat Prompt" --> LlmAPI
+  CronWorker -- "Dispatch Email Alerts" --> SmtpGateway
+  CronWorker -- "Query Due Deadlines" --> Atlas

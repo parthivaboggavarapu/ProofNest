@@ -1,0 +1,19 @@
+{
+  "name": "proofnest-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ProofNest — Every Purchase, Safely Organized. Full-Stack Web Application with AI-assisted document processing and information retrieval.",
+  "scripts": {
+    "docs:validate": "echo \"Validating ProofNest blueprint documentation and diagrams...\""
+  },
+  "keywords": [
+    "proofnest",
+    "personal-inventory",
+    "invoice-management",
+    "warranty-tracker",
+    "ocr",
+    "ai-assistant"
+  ],
+  "author": "ProofNest Engineering Team",
+  "license": "UNLICENSED"
+}

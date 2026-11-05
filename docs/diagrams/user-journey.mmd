@@ -1,0 +1,36 @@
+flowchart TD
+  Start(["User Arrives at ProofNest"]) --> AuthCheck{"Authenticated?"}
+  AuthCheck -- "No" --> RegisterLogin["Register / Login (JWT in httpOnly Cookie)"]
+  RegisterLogin --> Dashboard["ProofNest Dashboard"]
+  AuthCheck -- "Yes" --> Dashboard
+
+  Dashboard --> ActionSelect{"Choose Action"}
+
+  %% Path A: Product Management
+  ActionSelect -- "Add New Product" --> EntryMode{"Entry Mode"}
+  EntryMode -- "Manual Form" --> FillForm["Enter Product Details, Brand, Model, Dates, Price"]
+  FillForm --> SaveProduct["ProductService.createProduct()"]
+  SaveProduct --> ProductView["Product Detail Page"]
+
+  EntryMode -- "Upload Invoice" --> UploadDoc["Upload Invoice (PDF/Image)"]
+  UploadDoc --> OCRProcess["Backend Processes OCR (Status: processing)"]
+  OCRProcess --> ReviewModal["Review Suggested Fields Modal"]
+  ReviewModal --> UserEdit["User Reviews, Corrects, and Confirms Data"]
+  UserEdit --> SaveConfirmed["Save Verified Product Data & Deadlines"]
+  SaveConfirmed --> ProductView
+
+  %% Path B: Deadlines & Reminders
+  ActionSelect -- "View Deadlines" --> CalendarView["Smart Deadline Calendar"]
+  CalendarView --> ManageDeadlines["Add / Edit Deadlines (Warranty, Return, Maintenance)"]
+  ManageDeadlines --> SchedulerRun["Scheduled Worker Checks Dates"]
+  SchedulerRun --> Notify["In-App Notification & Reminder"]
+
+  %% Path C: Repair & Expenses
+  ActionSelect -- "Log Repair" --> LogRepairForm["Add Repair Record (Cost, Center, Description, Receipt)"]
+  LogRepairForm --> CalcExpense["RepairHistoryManager Recalculates Total Spent"]
+  CalcExpense --> ProductHistory["Updated Product Timeline & Expense History"]
+
+  %% Path D: AI Assistant
+  ActionSelect -- "Ask AI Assistant" --> AskQuery["Type Natural Language Question"]
+  AskQuery --> GroundedRetrieval["System Fetches Authenticated User Records"]
+  GroundedRetrieval --> AnswerWithCitation["Grounded Answer + Cited Products/Invoices"]

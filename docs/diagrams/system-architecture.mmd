@@ -1,0 +1,66 @@
+flowchart TD
+  subgraph ClientLayer["Client Layer (Browser / SPA)"]
+    UI["React 18 Single Page Application"]
+    Tailwind["Tailwind CSS UI Component Library"]
+    ClientState["Auth / App Context & State Cache"]
+    UI --> ClientState
+    UI --> Tailwind
+  end
+
+  subgraph Gateway["Network & Edge Gateway"]
+    HTTPS["HTTPS / TLS 1.3 Terminating Reverse Proxy"]
+    RateLimiter["Rate Limiting & Security Headers (Helmet)"]
+    HTTPS --> RateLimiter
+  end
+
+  subgraph BackendServer["Backend Application Server (Node.js & Express)"]
+    AuthMW["JWT Auth & Ownership Verification Middleware"]
+    APIRouter["Express REST API Router (/api/v1)"]
+    
+    subgraph ServiceDomain["OOP Domain Services"]
+      ProductService["ProductService"]
+      WarrantyTracker["WarrantyTracker"]
+      RepairHistoryManager["RepairHistoryManager"]
+      DocumentExtractor["DocumentExtractor"]
+      DeadlineService["DeadlineService"]
+      NotificationService["NotificationService"]
+      AiRetrievalService["AiRetrievalService"]
+      DashboardService["DashboardService"]
+    end
+
+    subgraph BackgroundJobs["Background Worker & Scheduler"]
+      Scheduler["Node-Cron Reminder Worker"]
+      ReminderJob["Upcoming Deadline Check Job"]
+      Scheduler --> ReminderJob
+    end
+
+    RateLimiter --> AuthMW
+    AuthMW --> APIRouter
+    APIRouter --> ServiceDomain
+    ReminderJob --> NotificationService
+  end
+
+  subgraph IntegrationAdapters["Integration Layer (Adapter Pattern)"]
+    StorageAdapter["Storage Adapter (Local FS / S3-Compatible)"]
+    OcrAdapter["OCR Adapter (Tesseract.js / Cloud OCR)"]
+    LlmAdapter["LLM Adapter (Grounded Retrieval / API Client)"]
+  end
+
+  subgraph DataLayer["Persistence & Storage Layer"]
+    MongoDB[("MongoDB Database (Mongoose ODM)")]
+    DiskOrS3[("Encrypted File Storage (Local Dir / Cloud Bucket)")]
+  end
+
+  %% Client to Backend
+  ClientState -- "REST API (HTTP + JSON, Cookies)" --> HTTPS
+
+  %% Services to Integrations
+  DocumentExtractor --> OcrAdapter
+  DocumentExtractor --> StorageAdapter
+  AiRetrievalService --> LlmAdapter
+  ProductService --> StorageAdapter
+
+  %% Services to Data
+  ServiceDomain --> MongoDB
+  StorageAdapter --> DiskOrS3
+  ReminderJob --> MongoDB

@@ -1,0 +1,49 @@
+sequenceDiagram
+  autonumber
+  actor User as User Browser
+  participant Client as React Client (Axios / Fetch)
+  participant Proxy as Reverse Proxy / Gateway
+  participant API as Express API Server
+  participant Storage as File Storage Adapter
+  participant DB as MongoDB Database
+
+  Note over User,DB: 1. Secure Authentication Flow
+  User->>Client: Enters credentials (email, password)
+  Client->>Proxy: POST /api/auth/login { email, password }
+  Proxy->>API: Forward request
+  API->>DB: User.findOne({ email })
+  DB-->>API: userRecord with passwordHash
+  API->>API: Verify bcrypt hash & generate JWT tokens
+  API-->>Proxy: Set-Cookie: accessToken (httpOnly, 15m), refreshToken (7d)
+  Proxy-->>Client: 200 OK { user: { id, name, email } }
+
+  Note over User,DB: 2. Authenticated Data Retrieval
+  Client->>Proxy: GET /api/products?page=1&limit=10 (Cookie attached)
+  Proxy->>API: Forward with Cookie
+  API->>API: authMiddleware validates token, sets req.user.id
+  API->>DB: Product.find({ userId: req.user.id }).sort({ createdAt: -1 })
+  DB-->>API: productList[]
+  API-->>Client: 200 OK { success: true, data: productList, meta: { total, page } }
+
+  Note over User,DB: 3. Secure File Upload & Streaming Download
+  Client->>Proxy: POST /api/documents/upload (multipart/form-data)
+  Proxy->>API: Forward file stream
+  API->>Storage: Store encrypted file (UUID.pdf)
+  Storage-->>API: Return storageKey
+  API->>DB: Document.create({ userId: req.user.id, storageKey, ... })
+  DB-->>API: documentRecord
+  API-->>Client: 201 Created { success: true, data: documentRecord }
+
+  Client->>Proxy: GET /api/documents/:id/download
+  Proxy->>API: Forward request
+  API->>DB: Document.findById(id)
+  API->>API: Verify doc.userId === req.user.id (Ownership enforcement)
+  API->>Storage: Stream file chunked
+  Storage-->>API: Stream bytes
+  API-->>Client: 200 OK with Content-Disposition attachment
+
+  Note over User,DB: 4. Standardized Error Handling
+  Client->>Proxy: GET /api/products/invalid-id
+  Proxy->>API: Forward request
+  API->>API: Catch CastError or 404 Not Found
+  API-->>Client: 404 Not Found { success: false, error: { code: "NOT_FOUND", message: "Product record not found" } }

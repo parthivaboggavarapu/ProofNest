@@ -1,0 +1,42 @@
+sequenceDiagram
+  autonumber
+  actor User as User (Browser)
+  participant FE as React Frontend (Assistant Chat)
+  participant API as Express API Router
+  participant Auth as Auth & Ownership Middleware
+  participant AI as AiRetrievalService
+  participant DB as MongoDB (User-Scoped Collections)
+  participant LLM as LLM Engine Adapter
+
+  User->>FE: Types question: "How much have I spent repairing my phone?"
+  FE->>API: POST /api/assistant/ask { query, conversationId }
+  API->>Auth: Verify JWT cookie & extract userId
+  Auth-->>API: Authorized (userId)
+
+  API->>AI: processQuery(query, userId, conversationId)
+  
+  rect rgb(240, 255, 240)
+    Note over AI,DB: User-Scoped Grounded Retrieval Layer
+    AI->>AI: Classify intent (Category: REPAIR_EXPENSES, Entity: "phone")
+    AI->>DB: Product.find({ userId, $text: { $search: "phone" } })
+    DB-->>AI: Matched product: "iPhone 14 Pro" (_id: 65a1...)
+    AI->>DB: Repair.find({ userId, productId: "65a1..." })
+    DB-->>AI: 2 Repair records (Screen replacement: $180, Battery: $70)
+  end
+
+  alt No matching records found
+    AI-->>API: Return grounded message: "No repair records found for phone."
+    API-->>FE: 200 OK { answer: "You have no recorded repairs...", citations: [] }
+    FE->>User: Display explicit missing-information response
+  else Records retrieved successfully
+    AI->>AI: Construct strict prompt with retrieved records & citation IDs
+    AI->>LLM: generateGroundedResponse(prompt, context)
+    Note over LLM: LLM instructed to answer ONLY from context and cite IDs
+    LLM-->>AI: "You have spent a total of $250 across 2 repairs for your iPhone 14 Pro [ref:65a1]..."
+    
+    AI->>AI: Validate cited IDs belong to authenticated user
+    AI->>DB: AiConversation.update({ messages: [userMsg, assistantMsg] })
+    AI-->>API: { answer, citedProducts: [iPhone], citedRepairs: [...] }
+    API-->>FE: 200 OK { answer, citations }
+    FE->>User: Render markdown answer with clickable product & receipt badges
+  end

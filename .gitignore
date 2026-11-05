@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build output
+dist/
+build/
+coverage/
+.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Uploaded files (local development storage)
+backend/uploads/
+tmp/
+temp/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Misc
+*.pem
+*.key

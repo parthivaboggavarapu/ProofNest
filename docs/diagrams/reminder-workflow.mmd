@@ -1,0 +1,44 @@
+sequenceDiagram
+  autonumber
+  participant Cron as Cron Job / Scheduler
+  participant Lock as Lock Mechanism (MongoDB/Redis)
+  participant Worker as ReminderJob Worker
+  participant DS as DeadlineService
+  participant DB as MongoDB Collections
+  participant NS as NotificationService
+  participant FE as React Frontend (User Session)
+
+  Cron->>Worker: Trigger Scheduled Check (Hourly / Daily)
+  Worker->>Lock: Acquire Execution Lock ("reminder_runner_lock")
+  alt Lock acquisition fails (Another instance running)
+    Lock-->>Worker: Lock unavailable
+    Worker-->>Cron: Abort execution (Avoid duplicate run)
+  else Lock acquired successfully
+    Lock-->>Worker: Lock granted (TTL 5 mins)
+    Worker->>DS: findDueReminders(currentDate)
+    
+    DS->>DB: Deadline.find({ status: "pending", isConfirmed: true, dueDate: { $gte: now } })
+    DB-->>DS: candidateDeadlines[]
+
+    loop For each candidate deadline
+      DS->>DS: Evaluate if today matches (dueDate - reminderDaysBefore)
+      alt Reminder is due AND not already notified today
+        DS->>NS: dispatchReminder(deadline, user)
+        NS->>DB: Notification.create({ userId, deadlineId, type: "deadline_reminder" })
+        NS->>DB: Deadline.updateOne({ _id: deadline._id }, { lastNotifiedAt: now })
+        opt If user enabled email alerts
+          NS->>NS: Send email notification via SMTP adapter
+        end
+      else Already notified or not matching day
+        DS->>DS: Skip (Prevent duplicate notification)
+      end
+    end
+
+    Worker->>Lock: Release Execution Lock
+    Worker-->>Cron: Run completed successfully
+  end
+
+  Note over FE,DB: User Visits Dashboard
+  FE->>DB: GET /api/notifications (authenticated)
+  DB-->>FE: Return unread notifications[]
+  FE->>FE: Display badge counter & notification list
