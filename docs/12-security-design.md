@@ -142,3 +142,4 @@ All incoming request bodies are validated using strict schema validators (e.g. `
 - Dates are checked for valid ISO-8601 formatting and logical consistency (e.g. `warrantyExpiryDate >= purchaseDate`).
 - Numbers are constrained (purchase price >= 0, repair cost >= 0).
 - Special characters in user-supplied strings are sanitized to prevent NoSQL query injection and stored XSS.
+

@@ -468,3 +468,4 @@ proofnest/
 | `context/AuthContext.jsx` | Authentication state, login, logout, and user profile management. | Member 2 | MVP |
 | `context/NotificationContext.jsx`| Unread alert counter and live notification feed. | Member 2 | MVP |
 | `services/api.js` | Axios client configured with `withCredentials: true` and interceptors. | Member 2 | MVP |
+

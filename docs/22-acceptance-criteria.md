@@ -128,3 +128,4 @@
   - **When** the user confirms deletion via `DELETE /api/products/:id`.
   - **Then** the product, associated deadlines, and repair records are permanently removed from the database.
   - **And** attached documents have their `productId` cleared or are deleted if `deleteFiles=true` is requested.
+

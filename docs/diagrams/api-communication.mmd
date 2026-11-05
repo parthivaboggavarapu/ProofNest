@@ -47,3 +47,4 @@ sequenceDiagram
   Proxy->>API: Forward request
   API->>API: Catch CastError or 404 Not Found
   API-->>Client: 404 Not Found { success: false, error: { code: "NOT_FOUND", message: "Product record not found" } }
+

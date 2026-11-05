@@ -680,3 +680,4 @@ const aiMessageSchema = new mongoose.Schema({
 
 1. **Deadlines & Repairs:** Always hard deleted upon product deletion because they have no meaning outside the product context.
 2. **Documents:** By default, their `productId` is set to `null` to retain valuable tax/insurance receipts in the user's document vault. If the client passes `?deleteFiles=true`, the documents and their physical files are permanently deleted.
+

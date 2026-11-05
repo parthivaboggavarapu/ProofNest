@@ -271,3 +271,4 @@ class AppError extends Error {
 3. `JsonWebTokenError` / `TokenExpiredError` -> Returns `401 Unauthorized`.
 4. `MulterError` (e.g. `LIMIT_FILE_SIZE`) -> Returns `413 Payload Too Large`.
 5. Uncaught exceptions in production -> Returns `500 Internal Server Error` with generic message while logging full stack trace server-side.
+

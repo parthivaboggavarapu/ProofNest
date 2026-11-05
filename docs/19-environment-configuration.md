@@ -69,3 +69,4 @@ All frontend variables must be prefixed with `VITE_` to be recognized by Vite:
 
 3. **Validation on Boot:**
    The backend `config/env.js` module validates all required variables using a schema check at server startup. If any required variable is missing or malformed, the process terminates immediately with an explanatory error log.
+

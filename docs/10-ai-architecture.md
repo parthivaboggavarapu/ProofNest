@@ -147,3 +147,4 @@ To prevent the LLM from hallucinating citation IDs:
 2. The service verifies that each extracted ID actually belongs to the caller's retrieved record set.
 3. Any hallucinated IDs are stripped before returning the payload to the frontend.
 4. The frontend renders valid citations as interactive, clickable pills that open the corresponding item details modal.
+

@@ -171,3 +171,4 @@ The architecture enforces three architectural invariants that cannot be bypassed
 1. **The Tenant Invariant:** Every query to MongoDB must include `{ userId: req.user.id }`. No global `findById` calls are permitted without checking owner equality.
 2. **The Verification Invariant:** Data extracted from documents must remain in `review_required` status until verified via `POST /api/documents/:id/confirm`. Unconfirmed OCR values are never promoted to verified product records.
 3. **The Grounding Invariant:** The AI assistant must only receive context documents that have passed user-scoped authorization queries. The system prompt strictly prohibits speculation or invention of missing data.
+

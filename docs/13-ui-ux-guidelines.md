@@ -95,3 +95,4 @@ Destructive actions (e.g., deleting a product, removing an uploaded invoice) req
 - **Keyboard Navigation:** All interactive elements (buttons, inputs, modal dialogs) support Tab navigation, Enter selection, and Escape key dismissal.
 - **Screen Reader Support:** Accessible ARIA attributes (`aria-expanded`, `aria-haspopup`, `aria-live="polite"` for live OCR status updates) are applied across dynamic widgets.
 - **Form Validation:** Error messages are announced and displayed directly below the invalid input field in high-contrast red text.
+

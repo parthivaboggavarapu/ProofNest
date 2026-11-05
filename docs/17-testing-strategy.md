@@ -116,3 +116,4 @@ tests/
 ### Test 10: File Upload Security & Size Gate
 - **Action A:** Upload a 15 MB file. -> **Expected:** HTTP `413 Payload Too Large`.
 - **Action B:** Upload an `.exe` file renamed to `invoice.pdf`. -> **Expected:** HTTP `422 Unprocessable Entity` (magic byte validation rejection).
+

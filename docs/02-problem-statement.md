@@ -65,3 +65,4 @@ When a device breaks, malfunctions, or reaches the end of its return window, con
 | **Google Drive / Dropbox** | Dumb file storage. No date awareness, no deadline alerts, no schema, no calculation of repair totals. | Domain-specific entity relationships: Document is tied to Product, Deadlines, and Repairs. |
 | **Spreadsheets (Excel/Sheets)** | High manual data-entry burden. No file attachments, no OCR ingestion, no mobile-friendly UX. | Automated OCR extraction with intuitive review modal, instant file downloads, and AI chat. |
 | **Enterprise Asset Trackers** | Over-engineered, expensive, enterprise-focused, devoid of consumer warranty and return workflows. | Clean consumer-grade UX tailored to individual and household ownership. |
+

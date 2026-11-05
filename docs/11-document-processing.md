@@ -168,3 +168,4 @@ class OcrAdapter {
 ### 6.2 Implementations
 - `TesseractOcrAdapter`: Local offline OCR engine using Tesseract.js for development and testing without external API costs.
 - `CloudOcrAdapter`: Production-ready adapter supporting Google Cloud Document AI or AWS Textract for high-accuracy invoice layout parsing.
+

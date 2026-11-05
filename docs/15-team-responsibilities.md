@@ -93,3 +93,4 @@ Certain core files impact multiple developers. Direct modifications without prio
    - Blockers or shared file editing needs.
 2. **Contract Review Meeting:** Held before introducing new API endpoints or schema modifications.
 3. **Pull Request Protocol:** At least one peer review is required before merging into `main`.
+

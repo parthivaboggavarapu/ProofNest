@@ -128,3 +128,4 @@ jobs:
 - **Liveness Probe:** `GET /health` returns `200 OK { status: "healthy", uptime: 1042 }`.
 - **Readiness Probe:** `GET /health/ready` verifies live connectivity to MongoDB and S3 storage before accepting incoming user traffic.
 - **Error Tracking:** Sentry integration for unhandled backend exceptions and frontend crash reporting.
+
