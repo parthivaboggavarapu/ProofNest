@@ -1,0 +1,18 @@
+{
+  "name": "proofnest-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ProofNest backend database layer and server runtime",
+  "main": "config/db.js",
+  "scripts": {
+    "test:db": "node tests/database.test.js",
+    "test:atlas": "node tests/verifyAtlasConnection.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "connect-mongo": "^5.1.0",
+    "dotenv": "^17.3.1",
+    "mongoose": "^9.0.2"
+  }
+}
+
