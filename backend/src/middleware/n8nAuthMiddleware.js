@@ -1,73 +1,119 @@
 const crypto = require('crypto');
 
 /**
- * Generates an HMAC-SHA256 signature for outgoing payloads to n8n
- * @param {object|string} payload
- * @param {string} secret
- * @returns {string} hex signature
+ * Layer 1: Static Header Auth verification for n8n-to-Express requests.
+ * Reads X-ProofNest-Webhook-Secret header and performs constant-time comparison.
  */
-const signPayload = (payload, secret) => {
-  const data = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  return crypto.createHmac('sha256', secret).update(data).digest('hex');
-};
+const verifyN8nWebhookSecret = (req, res, next) => {
+  const configuredSecret = process.env.N8N_WEBHOOK_SECRET;
 
-/**
- * Middleware to verify incoming callbacks or webhook calls from n8n.
- * Checks X-N8N-Signature or Authorization Bearer header against N8N_WEBHOOK_SECRET.
- */
-const verifyN8nSignature = (req, res, next) => {
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-
-  if (!secret) {
-    // If not configured in development, log warning and allow if dev mode
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[n8n Auth] Warning: N8N_WEBHOOK_SECRET is not configured in .env. Skipping strict verification in development.');
-      return next();
-    }
+  if (!configuredSecret) {
     return res.status(500).json({
       success: false,
-      message: 'Server security error: N8N_WEBHOOK_SECRET is unconfigured.'
+      message: 'Server configuration error: N8N_WEBHOOK_SECRET is not configured'
     });
   }
 
-  // Check 1: Shared secret via Bearer or custom header
-  const authHeader = req.headers['authorization'];
-  const directHeaderSecret = req.headers['x-n8n-secret'];
-  
-  if (directHeaderSecret === secret) {
-    return next();
+  const providedSecret =
+    req.headers['x-proofnest-webhook-secret'] ||
+    req.headers['x-proofnest-webhook-secret'.toLowerCase()];
+
+  if (!providedSecret) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Missing required webhook secret header'
+    });
   }
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token === secret) {
-      return next();
-    }
+  const configuredBuffer = Buffer.from(String(configuredSecret), 'utf8');
+  const providedBuffer = Buffer.from(String(providedSecret), 'utf8');
+
+  if (
+    configuredBuffer.length !== providedBuffer.length ||
+    !crypto.timingSafeEqual(configuredBuffer, providedBuffer)
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Invalid webhook secret'
+    });
   }
 
-  // Check 2: HMAC signature via X-N8N-Signature
-  const signature = req.headers['x-n8n-signature'];
-  if (signature) {
-    const rawBody = req.rawBody || JSON.stringify(req.body);
-    const expectedSig = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-    
-    // Constant-time comparison
-    if (
-      signature.length === expectedSig.length &&
-      crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expectedSig, 'utf8'))
-    ) {
-      return next();
-    }
-  }
-
-  return res.status(403).json({
-    success: false,
-    message: 'Forbidden: Invalid or missing n8n signature/shared secret.'
-  });
+  return next();
 };
 
 /**
- * Generates a short-lived token for n8n to safely download a specific document
+ * Layer 2: Optional HMAC-SHA256 request signing verification with timestamps & replay protection.
+ * Used for high-security callbacks and webhook dispatches.
+ * Headers:
+ * - X-ProofNest-Signature: Hex digest of HMAC-SHA256(timestamp + "." + rawBody, secret)
+ * - X-ProofNest-Timestamp: Epoch milliseconds (must be within tolerance, default 5 mins)
+ */
+const verifyN8nHmacSignature = (req, res, next) => {
+  const secret = process.env.N8N_HMAC_SECRET || process.env.N8N_WEBHOOK_SECRET;
+
+  if (!secret) {
+    return res.status(500).json({
+      success: false,
+      message: 'Server configuration error: Webhook HMAC secret is not configured'
+    });
+  }
+
+  const signature = req.headers['x-proofnest-signature'];
+  const timestamp = req.headers['x-proofnest-timestamp'];
+
+  if (!signature || !timestamp) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Missing HMAC signature or timestamp headers'
+    });
+  }
+
+  // Replay protection: check timestamp tolerance (5 minutes)
+  const now = Date.now();
+  const reqTime = parseInt(timestamp, 10);
+  const TOLERANCE_MS = 5 * 60 * 1000;
+
+  if (isNaN(reqTime) || Math.abs(now - reqTime) > TOLERANCE_MS) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Request timestamp expired or outside acceptable window'
+    });
+  }
+
+  const rawBody = req.rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}));
+  const payloadToSign = `${timestamp}.${rawBody}`;
+  const expectedSig = crypto.createHmac('sha256', secret).update(payloadToSign).digest('hex');
+
+  const sigBuf = Buffer.from(signature, 'utf8');
+  const expectedBuf = Buffer.from(expectedSig, 'utf8');
+
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Invalid HMAC signature'
+    });
+  }
+
+  return next();
+};
+
+/**
+ * Helper to generate HMAC-SHA256 signed headers for outgoing calls from Express to n8n
+ */
+const generateHmacHeaders = (payload, secret) => {
+  const timestamp = Date.now().toString();
+  const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
+  const payloadToSign = `${timestamp}.${rawBody}`;
+  const signature = crypto.createHmac('sha256', secret).update(payloadToSign).digest('hex');
+
+  return {
+    'X-ProofNest-Signature': signature,
+    'X-ProofNest-Timestamp': timestamp
+  };
+};
+
+/**
+ * Short-lived token generator for n8n workers to retrieve uploaded documents
  */
 const generateDocumentAccessToken = (documentId, expiresInSeconds = 300) => {
   const secret = process.env.N8N_WEBHOOK_SECRET || 'n8n_default_shared_secret_2026';
@@ -97,15 +143,19 @@ const verifyDocumentAccessToken = (documentId, token) => {
   const expectedPayload = `${tokenDocId}:${expiresAtStr}`;
   const expectedHmac = crypto.createHmac('sha256', secret).update(expectedPayload).digest('hex');
 
+  const hmacBuf = Buffer.from(hmac, 'utf8');
+  const expectedHmacBuf = Buffer.from(expectedHmac, 'utf8');
+
   return (
-    hmac.length === expectedHmac.length &&
-    crypto.timingSafeEqual(Buffer.from(hmac, 'utf8'), Buffer.from(expectedHmac, 'utf8'))
+    hmacBuf.length === expectedHmacBuf.length &&
+    crypto.timingSafeEqual(hmacBuf, expectedHmacBuf)
   );
 };
 
 module.exports = {
-  signPayload,
-  verifyN8nSignature,
+  verifyN8nWebhookSecret,
+  verifyN8nHmacSignature,
+  generateHmacHeaders,
   generateDocumentAccessToken,
   verifyDocumentAccessToken
 };

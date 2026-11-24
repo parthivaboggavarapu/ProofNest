@@ -29,6 +29,9 @@ class DocumentController {
       res.status(201).json({
         success: true,
         message: 'Document uploaded to GridFS successfully.',
+        data: {
+          document
+        },
         document
       });
     } catch (error) {

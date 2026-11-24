@@ -19,9 +19,11 @@ async function startServer() {
     startReminderJob();
 
     // 3. Start HTTP server
-    const server = app.listen(PORT, () => {
-      console.log(`[ProofNest Server] Listening on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode.`);
-    });
+ const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(
+    `[ProofNest Server] Listening on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode.`
+  );
+});
 
     const shutdown = async () => {
       console.log('[ProofNest Server] Shutting down gracefully...');

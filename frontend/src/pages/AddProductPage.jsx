@@ -26,6 +26,7 @@ export default function AddProductPage() {
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extractedDocId, setExtractedDocId] = useState(null);
+  const [activeJobId, setActiveJobId] = useState(null);
   const [ocrSuccess, setOcrSuccess] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(''); // 'Uploading', 'Triggering n8n workflow', 'Analyzing'
 
@@ -66,35 +67,53 @@ export default function AddProductPage() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      if (!uploadRes.data.success) {
-        throw new Error(uploadRes.data.message || 'Failed to upload document');
+      if (!uploadRes.data?.success) {
+        throw new Error(uploadRes.data?.message || uploadRes.data?.error || 'Failed to upload document');
       }
 
-      const documentId = uploadRes.data.data.document._id;
+      // Safely access document ID from both potential response envelopes
+      const uploadedDoc = uploadRes.data.data?.document || uploadRes.data.document;
+      const documentId = uploadedDoc?._id || uploadedDoc?.id;
+      
+      if (!documentId) {
+        throw new Error('Upload succeeded but no document ID was returned by the server.');
+      }
       setExtractedDocId(documentId);
 
       // Step 2: Trigger n8n asynchronous processing job
       setProcessingStatus('Triggering n8n AI workflow...');
       const jobRes = await api.post('/integrations/n8n/document-processing', { documentId });
-      const jobId = jobRes.data.data?.jobId;
+      const jobId = jobRes.data?.data?.jobId;
+      if (jobId) {
+        setActiveJobId(jobId);
+      }
 
       // Step 3: Poll for job completion with timeout
       setProcessingStatus('n8n AI extraction in progress...');
       let attempts = 0;
       let completedData = null;
 
-      while (attempts < 20) {
-        attempts++;
-        await new Promise(r => setTimeout(r, 1200));
+      if (jobId) {
+        while (attempts < 25) {
+          attempts++;
+          await new Promise(r => setTimeout(r, 1200));
 
-        const statusRes = await api.get(`/integrations/n8n/jobs/${jobId}`);
-        const job = statusRes.data.data;
+          try {
+            const statusRes = await api.get(`/integrations/n8n/jobs/${jobId}`);
+            const job = statusRes.data?.data;
 
-        if (job.status === 'completed') {
-          completedData = job.result?.extractedData;
-          break;
-        } else if (job.status === 'failed') {
-          throw new Error(job.error || 'n8n workflow reported failure');
+            if (job?.status === 'completed') {
+              completedData = job.result?.extractedData;
+              break;
+            } else if (job?.status === 'failed') {
+              throw new Error(job.error || 'n8n workflow reported failure');
+            }
+          } catch (pollErr) {
+            if (pollErr.message && pollErr.message.includes('n8n workflow reported failure')) {
+              throw pollErr;
+            }
+            // Continue polling on transient network hiccups
+          }
         }
       }
 
@@ -154,6 +173,24 @@ export default function AddProductPage() {
     try {
       setSaving(true);
 
+      if (activeJobId) {
+        // Use n8n confirmation endpoint to persist user confirmed fields
+        const confirmRes = await api.post('/integrations/n8n/confirm-ocr', {
+          jobId: activeJobId,
+          confirmedProductData: {
+            ...formData,
+            purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : 0
+          }
+        });
+
+        if (confirmRes.data?.success) {
+          showToast('Product registered and document indexed!', 'success');
+          const productId = confirmRes.data.data?.product?._id || confirmRes.data.data?.product?.id;
+          navigate(productId ? `/products/${productId}` : '/products');
+          return;
+        }
+      }
+
       if (extractedDocId) {
         // Use OCR confirm route which creates the product, attaches the document, and triggers AI embedding
         const res = await api.post('/ocr/confirm', {
@@ -164,9 +201,10 @@ export default function AddProductPage() {
           }
         });
 
-        if (res.data.success) {
+        if (res.data?.success) {
           showToast('Product registered and document indexed!', 'success');
-          navigate(`/products/${res.data.data.product._id}`);
+          const productId = res.data.data?.product?._id || res.data.data?.product?.id;
+          navigate(productId ? `/products/${productId}` : '/products');
           return;
         }
       }

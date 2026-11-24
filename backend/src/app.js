@@ -42,9 +42,9 @@ app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 // Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    service: 'ProofNest REST API'
+    success: true,
+    status: 'ok',
+    application: 'ProofNest'
   });
 });
 
