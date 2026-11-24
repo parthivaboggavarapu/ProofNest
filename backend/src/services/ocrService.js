@@ -1,5 +1,4 @@
 const pdfParse = require('pdf-parse');
-const { createWorker } = require('tesseract.js');
 const productService = require('./productService');
 const documentService = require('./documentService');
 
@@ -53,8 +52,39 @@ class OcrService {
   async extractTextFromFile(buffer, mimeType) {
     if (mimeType === 'application/pdf') {
       try {
-        const data = await pdfParse(buffer);
-        return data.text || '';
+        const path = require('path');
+        const cp = require('child_process');
+
+        // Extract PDF text in an isolated worker process to prevent event-loop stalls
+        // and eliminate prototype/module state collisions
+        return await new Promise((resolve) => {
+          const workerPath = path.resolve(__dirname, './pdfWorker.js');
+          const child = cp.fork(workerPath, [], { silent: true });
+
+          const timeout = setTimeout(() => {
+            child.kill();
+            resolve('');
+          }, 15000);
+
+          child.on('message', (msg) => {
+            clearTimeout(timeout);
+            child.kill();
+            if (msg.success) {
+              resolve(msg.text || '');
+            } else {
+              console.warn('[PDF Parse Warning]:', msg.error);
+              resolve('');
+            }
+          });
+
+          child.on('error', (err) => {
+            clearTimeout(timeout);
+            console.warn('[PDF Worker Error]:', err.message);
+            resolve('');
+          });
+
+          child.send({ buffer: buffer.toString('base64') });
+        });
       } catch (err) {
         console.warn('[PDF Parse Error]:', err.message);
         return '';
@@ -63,6 +93,7 @@ class OcrService {
 
     if (mimeType.startsWith('image/')) {
       try {
+        const { createWorker } = require('tesseract.js');
         const worker = await createWorker('eng');
         const ret = await worker.recognize(buffer);
         await worker.terminate();

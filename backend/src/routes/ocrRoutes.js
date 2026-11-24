@@ -6,7 +6,10 @@ const { upload } = require('../middleware/uploadMiddleware');
 
 router.use(requireAuth);
 
-router.post('/extract', upload.single('file'), ocrController.extractInvoiceData);
-router.post('/confirm', upload.single('file'), ocrController.confirmExtractedData);
+// Text extraction: supports multipart upload or JSON body with { documentId }
+router.post('/extract', upload.single('file'), (req, res, next) => ocrController.extractText(req, res, next));
+
+// Retrieve previously extracted OCR text for a document
+router.get('/:documentId', (req, res, next) => ocrController.getOcrByDocumentId(req, res, next));
 
 module.exports = router;

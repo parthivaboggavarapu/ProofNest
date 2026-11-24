@@ -96,14 +96,19 @@ export default function AiChatPage() {
     setSending(true);
 
     try {
-      const res = await api.post('/integrations/n8n/ai-chat', {
+      const res = await api.post('/ai/chat', {
+        message: userText,
         query: userText,
         conversationId: activeConvId
       });
 
-      if (res.data.success) {
-        const { answer, sources, conversationId } = res.data.data;
-        if (!activeConvId) {
+      if (res.data?.success) {
+        const payload = res.data.data || res.data;
+        const answer = payload.answer || payload.message?.content || '';
+        const sources = payload.sources || [];
+        const conversationId = payload.conversationId || payload.message?.conversationId;
+
+        if (!activeConvId && conversationId) {
           setActiveConvId(conversationId);
           fetchConversations();
         }
@@ -118,7 +123,7 @@ export default function AiChatPage() {
         setMessages(prev => [...prev, assistantMsg]);
       }
     } catch (err) {
-      showToast(err.response?.data?.message || 'AI request failed', 'error');
+      showToast(err.response?.data?.error || err.response?.data?.message || 'AI request failed', 'error');
     } finally {
       setSending(false);
     }

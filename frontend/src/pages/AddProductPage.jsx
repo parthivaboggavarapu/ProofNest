@@ -4,7 +4,7 @@ import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { 
   ArrowLeft, UploadCloud, Sparkles, FileText, CheckCircle, 
-  AlertCircle, ShieldCheck, Tag, DollarSign, Calendar, Clock, RefreshCw
+  AlertCircle, ShieldCheck, Tag, DollarSign, Calendar, Clock, RefreshCw, Copy, Check
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -26,9 +26,10 @@ export default function AddProductPage() {
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extractedDocId, setExtractedDocId] = useState(null);
-  const [activeJobId, setActiveJobId] = useState(null);
+  const [extractedText, setExtractedText] = useState('');
+  const [copied, setCopied] = useState(false);
   const [ocrSuccess, setOcrSuccess] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState(''); // 'Uploading', 'Triggering n8n workflow', 'Analyzing'
+  const [processingStatus, setProcessingStatus] = useState('');
 
   // Product form data
   const [formData, setFormData] = useState({
@@ -47,6 +48,8 @@ export default function AddProductPage() {
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
+      setExtractedText('');
+      setOcrSuccess(false);
     }
   };
 
@@ -58,7 +61,7 @@ export default function AddProductPage() {
 
     try {
       setExtracting(true);
-      setProcessingStatus('Uploading document to GridFS vault...');
+      setProcessingStatus('Uploading invoice to GridFS vault...');
       const data = new FormData();
       data.append('file', selectedFile);
 
@@ -71,7 +74,6 @@ export default function AddProductPage() {
         throw new Error(uploadRes.data?.message || uploadRes.data?.error || 'Failed to upload document');
       }
 
-      // Safely access document ID from both potential response envelopes
       const uploadedDoc = uploadRes.data.data?.document || uploadRes.data.document;
       const documentId = uploadedDoc?._id || uploadedDoc?.id;
       
@@ -80,87 +82,37 @@ export default function AddProductPage() {
       }
       setExtractedDocId(documentId);
 
-      // Step 2: Trigger n8n asynchronous processing job
-      setProcessingStatus('Triggering n8n AI workflow...');
-      const jobRes = await api.post('/integrations/n8n/document-processing', { documentId });
-      const jobId = jobRes.data?.data?.jobId;
-      if (jobId) {
-        setActiveJobId(jobId);
-      }
+      // Step 2: Call internal OCR extraction endpoint
+      setProcessingStatus('Extracting invoice text...');
+      const ocrRes = await api.post('/ocr/extract', { documentId });
 
-      // Step 3: Poll for job completion with timeout
-      setProcessingStatus('n8n AI extraction in progress...');
-      let attempts = 0;
-      let completedData = null;
-
-      if (jobId) {
-        while (attempts < 25) {
-          attempts++;
-          await new Promise(r => setTimeout(r, 1200));
-
-          try {
-            const statusRes = await api.get(`/integrations/n8n/jobs/${jobId}`);
-            const job = statusRes.data?.data;
-
-            if (job?.status === 'completed') {
-              completedData = job.result?.extractedData;
-              break;
-            } else if (job?.status === 'failed') {
-              throw new Error(job.error || 'n8n workflow reported failure');
-            }
-          } catch (pollErr) {
-            if (pollErr.message && pollErr.message.includes('n8n workflow reported failure')) {
-              throw pollErr;
-            }
-            // Continue polling on transient network hiccups
-          }
-        }
-      }
-
-      if (completedData) {
+      if (ocrRes.data?.success) {
+        const text = ocrRes.data.rawText || '';
+        setExtractedText(text);
         setOcrSuccess(true);
-        setFormData(prev => ({
-          ...prev,
-          name: completedData.productName || completedData.brand || prev.name || 'Purchased Item',
-          brand: completedData.brand || prev.brand,
-          model: completedData.model || prev.model,
-          serialNumber: completedData.serialNumber || prev.serialNumber,
-          category: completedData.category || prev.category,
-          purchaseDate: completedData.purchaseDate ? completedData.purchaseDate.split('T')[0] : prev.purchaseDate,
-          warrantyExpiry: completedData.warrantyExpiry ? completedData.warrantyExpiry.split('T')[0] : prev.warrantyExpiry,
-          purchasePrice: completedData.purchasePrice !== undefined ? completedData.purchasePrice : prev.purchasePrice,
-          seller: completedData.seller || prev.seller
-        }));
-        showToast('Invoice parsed via n8n pipeline! Please review details below.', 'success');
-      } else {
-        // Fallback: Use standard direct extraction
-        const fallbackRes = await api.post('/ocr/extract', data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        if (fallbackRes.data.success) {
-          const { extractedData } = fallbackRes.data.data;
-          setOcrSuccess(true);
-          setFormData(prev => ({
-            ...prev,
-            name: extractedData.productName || extractedData.brand || prev.name || 'Purchased Item',
-            brand: extractedData.brand || prev.brand,
-            model: extractedData.model || prev.model,
-            serialNumber: extractedData.serialNumber || prev.serialNumber,
-            category: extractedData.category || prev.category,
-            purchaseDate: extractedData.purchaseDate ? extractedData.purchaseDate.split('T')[0] : prev.purchaseDate,
-            warrantyExpiry: extractedData.warrantyExpiry ? extractedData.warrantyExpiry.split('T')[0] : prev.warrantyExpiry,
-            purchasePrice: extractedData.purchasePrice !== undefined ? extractedData.purchasePrice : prev.purchasePrice,
-            seller: extractedData.seller || prev.seller
-          }));
-          showToast('Extracted invoice fields! Please review the details below.', 'success');
+
+        if (text.trim().length > 0) {
+          showToast('Text extraction completed.', 'success');
+        } else {
+          showToast('No readable text found. Please try a clearer scan.', 'info');
         }
+      } else {
+        throw new Error(ocrRes.data?.error || 'Text extraction failed. Please try again.');
       }
     } catch (err) {
-      showToast(err.response?.data?.message || err.message || 'OCR extraction failed. You can still fill fields manually.', 'error');
+      showToast(err.response?.data?.error || err.message || 'Text extraction failed. Please try again.', 'error');
     } finally {
       setExtracting(false);
       setProcessingStatus('');
     }
+  };
+
+  const handleCopyText = () => {
+    if (!extractedText) return;
+    navigator.clipboard.writeText(extractedText);
+    setCopied(true);
+    showToast('Extracted text copied to clipboard', 'success');
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSubmit = async (e) => {
@@ -173,54 +125,30 @@ export default function AddProductPage() {
     try {
       setSaving(true);
 
-      if (activeJobId) {
-        // Use n8n confirmation endpoint to persist user confirmed fields
-        const confirmRes = await api.post('/integrations/n8n/confirm-ocr', {
-          jobId: activeJobId,
-          confirmedProductData: {
-            ...formData,
-            purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : 0
-          }
-        });
-
-        if (confirmRes.data?.success) {
-          showToast('Product registered and document indexed!', 'success');
-          const productId = confirmRes.data.data?.product?._id || confirmRes.data.data?.product?.id;
-          navigate(productId ? `/products/${productId}` : '/products');
-          return;
-        }
-      }
-
-      if (extractedDocId) {
-        // Use OCR confirm route which creates the product, attaches the document, and triggers AI embedding
-        const res = await api.post('/ocr/confirm', {
-          documentId: extractedDocId,
-          productData: {
-            ...formData,
-            purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : 0
-          }
-        });
-
-        if (res.data?.success) {
-          showToast('Product registered and document indexed!', 'success');
-          const productId = res.data.data?.product?._id || res.data.data?.product?.id;
-          navigate(productId ? `/products/${productId}` : '/products');
-          return;
-        }
-      }
-
-      // Standard product creation (manual mode)
+      // Standard product creation
       const res = await api.post('/products', {
         ...formData,
         purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : 0
       });
 
-      if (res.data.success) {
-        showToast('Product created successfully!', 'success');
-        navigate(`/products/${res.data.data.product._id}`);
+      if (res.data?.success) {
+        const product = res.data.data?.product || res.data.product;
+        const productId = product?._id || product?.id;
+
+        // If an invoice document was uploaded during OCR, associate it with this new product
+        if (extractedDocId && productId) {
+          try {
+            await api.patch(`/documents/${extractedDocId}`, { productId });
+          } catch (patchErr) {
+            // Non-blocking if patch is unsupported or already linked
+          }
+        }
+
+        showToast('Product saved successfully!', 'success');
+        navigate(productId ? `/products/${productId}` : '/products');
       }
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to save product', 'error');
+      showToast(err.response?.data?.message || err.response?.data?.error || 'Failed to save product', 'error');
     } finally {
       setSaving(false);
     }
@@ -312,12 +240,12 @@ export default function AddProductPage() {
                   {extracting ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      {processingStatus || 'Processing with n8n AI...'}
+                      {processingStatus || 'Extracting invoice text...'}
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-3.5 h-3.5" />
-                      Extract Information
+                      Extract Text
                     </>
                   )}
                 </button>
@@ -326,7 +254,46 @@ export default function AddProductPage() {
               {ocrSuccess && (
                 <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg inline-flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  Invoice extracted! Fields have been populated below for your confirmation.
+                  Text extraction completed. Inspect the extracted text below.
+                </div>
+              )}
+
+              {/* Extracted Text Review Area */}
+              {extractedText && (
+                <div className="mt-6 text-left bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      Extracted Invoice Text
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyText}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-white border border-gray-200 px-2.5 py-1 rounded-md transition"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          Copy Text
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <textarea
+                    rows="6"
+                    readOnly
+                    value={extractedText}
+                    className="w-full text-xs font-mono bg-white border border-gray-200 rounded-lg p-3 text-gray-800 focus:outline-none"
+                    placeholder="Extracted text will appear here..."
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    Review and copy any needed invoice details into the product fields below. OCR text is stored with your document.
+                  </p>
                 </div>
               )}
             </div>

@@ -8,5 +8,6 @@ router.use(requireAuth);
 router.post('/chat', aiController.chat);
 router.get('/conversations', aiController.getConversations);
 router.get('/conversations/:id/messages', aiController.getMessages);
+router.delete('/conversations/:id', aiController.deleteConversation);
 
 module.exports = router;
