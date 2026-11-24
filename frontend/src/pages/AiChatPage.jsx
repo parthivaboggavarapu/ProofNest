@@ -96,7 +96,7 @@ export default function AiChatPage() {
     setSending(true);
 
     try {
-      const res = await api.post('/ai/query', {
+      const res = await api.post('/integrations/n8n/ai-chat', {
         query: userText,
         conversationId: activeConvId
       });

@@ -27,6 +27,7 @@ export default function AddProductPage() {
   const [saving, setSaving] = useState(false);
   const [extractedDocId, setExtractedDocId] = useState(null);
   const [ocrSuccess, setOcrSuccess] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState(''); // 'Uploading', 'Triggering n8n workflow', 'Analyzing'
 
   // Product form data
   const [formData, setFormData] = useState({
@@ -56,38 +57,90 @@ export default function AddProductPage() {
 
     try {
       setExtracting(true);
+      setProcessingStatus('Uploading document to GridFS vault...');
       const data = new FormData();
       data.append('file', selectedFile);
 
-      const res = await api.post('/ocr/extract', data, {
+      // Step 1: Upload document to GridFS
+      const uploadRes = await api.post('/documents/upload', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      if (res.data.success) {
-        const { extractedData, documentId } = res.data.data;
-        setExtractedDocId(documentId);
-        setOcrSuccess(true);
+      if (!uploadRes.data.success) {
+        throw new Error(uploadRes.data.message || 'Failed to upload document');
+      }
 
-        // Prepopulate form fields
+      const documentId = uploadRes.data.data.document._id;
+      setExtractedDocId(documentId);
+
+      // Step 2: Trigger n8n asynchronous processing job
+      setProcessingStatus('Triggering n8n AI workflow...');
+      const jobRes = await api.post('/integrations/n8n/document-processing', { documentId });
+      const jobId = jobRes.data.data?.jobId;
+
+      // Step 3: Poll for job completion with timeout
+      setProcessingStatus('n8n AI extraction in progress...');
+      let attempts = 0;
+      let completedData = null;
+
+      while (attempts < 20) {
+        attempts++;
+        await new Promise(r => setTimeout(r, 1200));
+
+        const statusRes = await api.get(`/integrations/n8n/jobs/${jobId}`);
+        const job = statusRes.data.data;
+
+        if (job.status === 'completed') {
+          completedData = job.result?.extractedData;
+          break;
+        } else if (job.status === 'failed') {
+          throw new Error(job.error || 'n8n workflow reported failure');
+        }
+      }
+
+      if (completedData) {
+        setOcrSuccess(true);
         setFormData(prev => ({
           ...prev,
-          name: extractedData.productName || extractedData.brand || prev.name || 'Purchased Item',
-          brand: extractedData.brand || prev.brand,
-          model: extractedData.model || prev.model,
-          serialNumber: extractedData.serialNumber || prev.serialNumber,
-          category: extractedData.category || prev.category,
-          purchaseDate: extractedData.purchaseDate ? extractedData.purchaseDate.split('T')[0] : prev.purchaseDate,
-          warrantyExpiry: extractedData.warrantyExpiry ? extractedData.warrantyExpiry.split('T')[0] : prev.warrantyExpiry,
-          purchasePrice: extractedData.purchasePrice !== undefined ? extractedData.purchasePrice : prev.purchasePrice,
-          seller: extractedData.seller || prev.seller
+          name: completedData.productName || completedData.brand || prev.name || 'Purchased Item',
+          brand: completedData.brand || prev.brand,
+          model: completedData.model || prev.model,
+          serialNumber: completedData.serialNumber || prev.serialNumber,
+          category: completedData.category || prev.category,
+          purchaseDate: completedData.purchaseDate ? completedData.purchaseDate.split('T')[0] : prev.purchaseDate,
+          warrantyExpiry: completedData.warrantyExpiry ? completedData.warrantyExpiry.split('T')[0] : prev.warrantyExpiry,
+          purchasePrice: completedData.purchasePrice !== undefined ? completedData.purchasePrice : prev.purchasePrice,
+          seller: completedData.seller || prev.seller
         }));
-
-        showToast('Invoice parsed successfully! Please review the details below.', 'success');
+        showToast('Invoice parsed via n8n pipeline! Please review details below.', 'success');
+      } else {
+        // Fallback: Use standard direct extraction
+        const fallbackRes = await api.post('/ocr/extract', data, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (fallbackRes.data.success) {
+          const { extractedData } = fallbackRes.data.data;
+          setOcrSuccess(true);
+          setFormData(prev => ({
+            ...prev,
+            name: extractedData.productName || extractedData.brand || prev.name || 'Purchased Item',
+            brand: extractedData.brand || prev.brand,
+            model: extractedData.model || prev.model,
+            serialNumber: extractedData.serialNumber || prev.serialNumber,
+            category: extractedData.category || prev.category,
+            purchaseDate: extractedData.purchaseDate ? extractedData.purchaseDate.split('T')[0] : prev.purchaseDate,
+            warrantyExpiry: extractedData.warrantyExpiry ? extractedData.warrantyExpiry.split('T')[0] : prev.warrantyExpiry,
+            purchasePrice: extractedData.purchasePrice !== undefined ? extractedData.purchasePrice : prev.purchasePrice,
+            seller: extractedData.seller || prev.seller
+          }));
+          showToast('Extracted invoice fields! Please review the details below.', 'success');
+        }
       }
     } catch (err) {
-      showToast(err.response?.data?.message || 'OCR extraction failed. You can still fill fields manually.', 'error');
+      showToast(err.response?.data?.message || err.message || 'OCR extraction failed. You can still fill fields manually.', 'error');
     } finally {
       setExtracting(false);
+      setProcessingStatus('');
     }
   };
 
@@ -221,7 +274,7 @@ export default function AddProductPage() {
                   {extracting ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      Parsing with OCR...
+                      {processingStatus || 'Processing with n8n AI...'}
                     </>
                   ) : (
                     <>

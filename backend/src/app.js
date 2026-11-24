@@ -10,6 +10,7 @@ const ocrRoutes = require('./routes/ocrRoutes');
 const repairRoutes = require('./routes/repairRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+const n8nRoutes = require('./routes/n8nRoutes');
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/ocr', ocrRoutes);
 app.use('/api/repairs', repairRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/integrations/n8n', n8nRoutes);
 
 // 404 handler for undefined routes
 app.use('*', (req, res) => {

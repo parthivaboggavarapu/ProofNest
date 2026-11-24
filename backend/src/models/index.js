@@ -7,6 +7,7 @@ const Notification = require('./Notification');
 const DocumentChunk = require('./DocumentChunk');
 const Conversation = require('./Conversation');
 const Message = require('./Message');
+const ProcessingJob = require('./ProcessingJob');
 
 module.exports = {
   User,
@@ -17,5 +18,6 @@ module.exports = {
   Notification,
   DocumentChunk,
   Conversation,
-  Message
+  Message,
+  ProcessingJob
 };
