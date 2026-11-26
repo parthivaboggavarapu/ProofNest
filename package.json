@@ -4,8 +4,13 @@
   "private": true,
   "description": "ProofNest — Every Purchase, Safely Organized. Full-Stack Web Application with AI-assisted document processing and information retrieval.",
   "scripts": {
-    "docs:validate": "echo \"Validating ProofNest blueprint documentation and diagrams...\""
+    "docs:validate": "echo \"Validating ProofNest blueprint documentation and diagrams...\"",
+    "test:db": "npm --prefix backend run test:db",
+    "test:atlas": "npm --prefix backend run test:atlas"
   },
+  "workspaces": [
+    "backend"
+  ],
   "keywords": [
     "proofnest",
     "personal-inventory",
