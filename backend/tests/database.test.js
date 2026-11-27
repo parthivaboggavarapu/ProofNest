@@ -26,18 +26,34 @@
  */
 
 const mongoose = require("mongoose");
+const { randomBytes } = require("node:crypto");
 const connectDB = require("../config/db");
 const { disconnectDB } = require("../config/db");
 const { createSessionStore } = require("../config/sessionStore");
 const { auditIndexesSafety } = require("../config/checkIndexes");
 const { User, Product, Document, Repair } = require("../models");
 
-const TEST_RUN_ID = Date.now().toString(36);
+const TEST_RUN_ID = `${Date.now().toString(36)}_${process.pid}_${randomBytes(4).toString("hex")}`;
 const TEST_EMAIL_1 = `test_db_alice_${TEST_RUN_ID}@example.com`;
 const TEST_EMAIL_2 = `test_db_bob_${TEST_RUN_ID}@example.com`;
+const TEST_SESSION_COLLECTION = `test_verification_sessions_${TEST_RUN_ID}`;
+const createdIds = {
+  users: [],
+  products: [],
+  documents: [],
+  repairs: [],
+};
 
 let testsPassed = 0;
 let testsFailed = 0;
+let sessionStore = null;
+let testSessionId = null;
+
+const createTracked = async (model, resource, data) => {
+  const _id = new mongoose.Types.ObjectId();
+  createdIds[resource].push(_id);
+  return model.create({ ...data, _id });
+};
 
 function assert(condition, testName, details = "") {
   if (condition) {
@@ -50,16 +66,37 @@ function assert(condition, testName, details = "") {
 }
 
 async function runDatabaseTests() {
+  let testError = null;
+  const cleanupFailures = [];
+
   console.log("===================================================================");
   console.log("  ProofNest Senior Database Engineer Verification Suite");
   console.log("===================================================================");
 
   try {
+    if (process.env.NODE_ENV !== "test") {
+      throw new Error("Set NODE_ENV=test before running database integration tests.");
+    }
+    if (!process.env.MONGO_TEST_URI) {
+      throw new Error(
+        "MONGO_TEST_URI must point to a separately provisioned test MongoDB deployment."
+      );
+    }
+    // This catches a direct env-var copy mistake, but does not prove deployment isolation.
+    if (
+      process.env.MONGO_TEST_URI === process.env.MONGO_URI ||
+      process.env.MONGO_TEST_URI === process.env.MONGODB_URI
+    ) {
+      throw new Error(
+        "MONGO_TEST_URI must not reuse the normal MongoDB URI; configure a separate test deployment."
+      );
+    }
+
     // -----------------------------------------------------------------
     // 1. Database Connection & Database Resolution
     // -----------------------------------------------------------------
     console.log("\n[1/10] Verifying MongoDB Connection & Database Resolution...");
-    const conn = await connectDB(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/proofnest");
+    const conn = await connectDB(process.env.MONGO_TEST_URI);
     const activeDbName = conn.connection.name;
 
     assert(conn.connection.readyState === 1, "Connection state is 1 (connected)");
@@ -70,19 +107,24 @@ async function runDatabaseTests() {
     // -----------------------------------------------------------------
     console.log("\n[2/10] Running Pre-Index Safety Audit (Existing Data Inspection)...");
     const auditResult = await auditIndexesSafety();
+    if (!auditResult || auditResult.isSafe !== true) {
+      throw new Error(
+        "Database index safety audit failed; no index changes were made."
+      );
+    }
     assert(
       typeof auditResult.isSafe === "boolean",
       "Safety audit ran non-destructively against existing collections without modifying data"
     );
 
-    // Sync indexes now that existing data safety is verified
+    // createIndexes adds declared indexes without dropping undeclared indexes.
     await Promise.all([
-      User.syncIndexes(),
-      Product.syncIndexes(),
-      Document.syncIndexes(),
-      Repair.syncIndexes(),
+      User.createIndexes(),
+      Product.createIndexes(),
+      Document.createIndexes(),
+      Repair.createIndexes(),
     ]);
-    assert(true, "Collection indexes synchronized successfully");
+    assert(true, "Declared indexes verified/created without dropping existing indexes");
 
     // -----------------------------------------------------------------
     // 3. User Model Validation, Required Fields & Password Hashing
@@ -125,7 +167,7 @@ async function runDatabaseTests() {
 
     // 3c. Valid user creation & bcrypt hashing
     const plainPassword = "SuperSecretPassword123!";
-    const testUser1 = await User.create({
+    const testUser1 = await createTracked(User, "users", {
       name: "Alice Developer",
       email: TEST_EMAIL_1,
       password: plainPassword,
@@ -155,7 +197,7 @@ async function runDatabaseTests() {
     console.log("\n[4/10] Verifying Unique Email Index...");
     let duplicateEmailError = null;
     try {
-      await User.create({
+      await createTracked(User, "users", {
         name: "Alice Imposter",
         email: TEST_EMAIL_1, // Same email
         password: "anotherPassword123",
@@ -169,7 +211,7 @@ async function runDatabaseTests() {
     );
 
     // Create User 2 for multi-user tests
-    const testUser2 = await User.create({
+    const testUser2 = await createTracked(User, "users", {
       name: "Bob Engineer",
       email: TEST_EMAIL_2,
       password: "BobPassword123!",
@@ -240,7 +282,7 @@ async function runDatabaseTests() {
 
     // 6a. Non-empty serial number created for User 1
     const testSerial = `SN-MAC-${TEST_RUN_ID}`;
-    const productA = await Product.create({
+    const productA = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "MacBook Pro 16",
       serialNumber: testSerial,
@@ -255,7 +297,7 @@ async function runDatabaseTests() {
     // 6b. Duplicate non-empty serial number under SAME user must FAIL
     let duplicateSerialUser1Error = null;
     try {
-      await Product.create({
+      await createTracked(Product, "products", {
         user: testUser1._id,
         name: "Duplicate MacBook",
         serialNumber: testSerial, // Same serial for same user
@@ -271,7 +313,7 @@ async function runDatabaseTests() {
     );
 
     // 6c. Same non-empty serial number under DIFFERENT user must SUCCEED
-    const productUnderUser2 = await Product.create({
+    const productUnderUser2 = await createTracked(Product, "products", {
       user: testUser2._id,
       name: "Bob's Work Laptop",
       serialNumber: testSerial, // Same serial number, different user
@@ -283,13 +325,13 @@ async function runDatabaseTests() {
     );
 
     // 6d. Multiple products with serialNumber = null under SAME user must SUCCEED
-    const productNull1 = await Product.create({
+    const productNull1 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Desk",
       serialNumber: null,
       category: "Furniture",
     });
-    const productNull2 = await Product.create({
+    const productNull2 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Chair",
       serialNumber: null,
@@ -301,13 +343,13 @@ async function runDatabaseTests() {
     );
 
     // 6e. Multiple products with serialNumber = "" (empty string) under SAME user must SUCCEED
-    const productEmpty1 = await Product.create({
+    const productEmpty1 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Notepad",
       serialNumber: "",
       category: "Stationery",
     });
-    const productEmpty2 = await Product.create({
+    const productEmpty2 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Pen",
       serialNumber: "",
@@ -319,12 +361,12 @@ async function runDatabaseTests() {
     );
 
     // 6f. Multiple products with serialNumber omitted (undefined) under SAME user must SUCCEED
-    const productOmitted1 = await Product.create({
+    const productOmitted1 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Coffee Mug",
       category: "Kitchen",
     });
-    const productOmitted2 = await Product.create({
+    const productOmitted2 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Water Bottle",
       category: "Kitchen",
@@ -335,13 +377,13 @@ async function runDatabaseTests() {
     );
 
     // 6g. Multiple products with whitespace-only serial numbers under SAME user must SUCCEED (trimmed to empty)
-    const productWhitespace1 = await Product.create({
+    const productWhitespace1 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Cable A",
       serialNumber: "   ",
       category: "Accessories",
     });
-    const productWhitespace2 = await Product.create({
+    const productWhitespace2 = await createTracked(Product, "products", {
       user: testUser1._id,
       name: "Cable B",
       serialNumber: "   ",
@@ -396,7 +438,7 @@ async function runDatabaseTests() {
     );
 
     // Valid document attached to User 1's product
-    const validDoc = await Document.create({
+    const validDoc = await createTracked(Document, "documents", {
       user: testUser1._id,
       product: productA._id,
       title: "MacBook AppleCare Warranty Card",
@@ -411,7 +453,7 @@ async function runDatabaseTests() {
     );
 
     // Standalone document without product (product is optional)
-    const standaloneDoc = await Document.create({
+    const standaloneDoc = await createTracked(Document, "documents", {
       user: testUser1._id,
       title: "General Supermarket Receipt",
       type: "receipt",
@@ -458,7 +500,7 @@ async function runDatabaseTests() {
       "Negative repairCost rejected by schema (min: 0)"
     );
 
-    const validRepair = await Repair.create({
+    const validRepair = await createTracked(Repair, "repairs", {
       user: testUser1._id,
       product: productA._id,
       issue: "Battery replacement",
@@ -478,8 +520,8 @@ async function runDatabaseTests() {
     // -----------------------------------------------------------------
     console.log("\n[10/10] Verifying connect-mongo Session Store & Database Target...");
 
-    const sessionStore = createSessionStore({
-      collectionName: "test_verification_sessions",
+    sessionStore = createSessionStore({
+      collectionName: TEST_SESSION_COLLECTION,
     });
 
     assert(typeof sessionStore.set === "function", "Session store instance exposes set() method");
@@ -487,7 +529,7 @@ async function runDatabaseTests() {
     assert(typeof sessionStore.destroy === "function", "Session store instance exposes destroy() method");
 
     // Write and read session
-    const testSessionId = `test_sess_token_${TEST_RUN_ID}`;
+    testSessionId = `test_sess_token_${TEST_RUN_ID}`;
     const testSessionData = {
       cookie: { maxAge: 86400000, httpOnly: true },
       userId: testUser1._id.toString(),
@@ -523,45 +565,86 @@ async function runDatabaseTests() {
       `Session store targets database '${targetSessionDbName}' and does NOT create a separate database`
     );
 
-    // Clean up test session record
-    await new Promise((resolve) => sessionStore.destroy(testSessionId, () => resolve()));
-
-    // -----------------------------------------------------------------
-    // Teardown: Clean up temporary test data only (Never deletes existing data)
-    // -----------------------------------------------------------------
-    console.log("\n[Teardown] Safely cleaning up temporary test records...");
-    await Repair.deleteMany({ user: { $in: [testUser1._id, testUser2._id] } });
-    await Document.deleteMany({ user: { $in: [testUser1._id, testUser2._id] } });
-    await Product.deleteMany({ user: { $in: [testUser1._id, testUser2._id] } });
-    await User.deleteMany({ _id: { $in: [testUser1._id, testUser2._id] } });
-
-    if (mongoose.connection.db) {
-      try {
-        await mongoose.connection.db.dropCollection("test_verification_sessions");
-      } catch (e) {
-        // Ignored if collection already cleaned
-      }
-    }
-    assert(true, "Temporary test records cleaned up safely; zero production/existing data affected");
-
-    console.log("\n===================================================================");
-    console.log(`  Verification Suite Complete: ${testsPassed} Passed, ${testsFailed} Failed`);
-    console.log("===================================================================");
-
-    await disconnectDB();
-
     if (testsFailed > 0) {
-      process.exit(1);
+      throw new Error(`${testsFailed} database verification test(s) failed.`);
     }
   } catch (error) {
-    console.error("FATAL ERROR in test suite:", error);
-    await disconnectDB();
-    process.exit(1);
+    testError = error;
+  } finally {
+    const cleanup = async (description, operation) => {
+      try {
+        await operation();
+      } catch {
+        cleanupFailures.push(description);
+      }
+    };
+
+    console.log("\n[Teardown] Safely cleaning up resources created by this run...");
+    if (testSessionId && sessionStore) {
+      await cleanup("session record", () =>
+        new Promise((resolve, reject) => {
+          sessionStore.destroy(testSessionId, (error) =>
+            error ? reject(error) : resolve()
+          );
+        })
+      );
+    }
+
+    const ownedResources = [
+      [Repair, createdIds.repairs],
+      [Document, createdIds.documents],
+      [Product, createdIds.products],
+      [User, createdIds.users],
+    ];
+    for (const [model, ids] of ownedResources) {
+      if (ids.length > 0) {
+        await cleanup(`${model.modelName} documents`, () =>
+          model.deleteMany({ _id: { $in: ids } })
+        );
+      }
+    }
+
+    if (sessionStore && mongoose.connection.db) {
+      await cleanup("unique session collection", async () => {
+        const collectionExists = await mongoose.connection.db
+          .listCollections({ name: TEST_SESSION_COLLECTION }, { nameOnly: true })
+          .hasNext();
+        if (collectionExists) {
+          await mongoose.connection.db.dropCollection(TEST_SESSION_COLLECTION);
+        }
+      });
+    }
+
+    if (sessionStore) {
+      await cleanup("session store", () => sessionStore.close());
+    }
+
+    await cleanup("MongoDB connection", () => disconnectDB());
+  }
+
+  console.log("\n===================================================================");
+  console.log(`  Verification Suite Complete: ${testsPassed} Passed, ${testsFailed} Failed`);
+  console.log("===================================================================");
+
+  if (cleanupFailures.length > 0) {
+    console.error(`Cleanup failed for: ${cleanupFailures.join(", ")}`);
+  }
+  if (testError) {
+    throw testError;
+  }
+  if (cleanupFailures.length > 0) {
+    throw new Error("Database test cleanup did not complete successfully.");
+  }
+  if (testsFailed > 0) {
+    throw new Error(`${testsFailed} database verification test(s) failed.`);
   }
 }
 
 if (require.main === module) {
-  runDatabaseTests();
+  runDatabaseTests().catch((error) => {
+    console.error(`FATAL ERROR in database test suite (${error.name}).`);
+    process.exitCode = 1;
+  });
 }
 
 module.exports = runDatabaseTests;

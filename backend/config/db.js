@@ -17,6 +17,12 @@ dotenv.config();
 
 // Track in-flight connection promise to prevent race conditions & duplicate connections
 let connectionPromise = null;
+let connectionUri = null;
+let inFlightUri = null;
+const atlasFallbackHosts = new Set([
+  "proofnestcluster.mongodb.net",
+  "proofnestcluster.aiu5b6f.mongodb.net",
+]);
 
 /**
  * Sanitizes MongoDB connection URI for safe console logging (masks credentials).
@@ -28,57 +34,115 @@ const sanitizeMongoUri = (uri) => {
   return uri.replace(/\/\/([^:]+):([^@]+)@/, "//$1:***@");
 };
 
+const isAllowedAtlasFallbackUri = (uri) => {
+  try {
+    const parsedUri = new URL(uri);
+    return (
+      parsedUri.protocol === "mongodb+srv:" &&
+      atlasFallbackHosts.has(parsedUri.hostname.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Connect to MongoDB ProofNest database.
  * 
- * Reuses existing connection if already established or in progress.
- * Includes automatic resilience fallback for Windows DNS querySrv EBADRESP.
+ * Reuses a connection only when its requested URI matches the tracked URI.
+ * Includes a restricted DNS fallback for normal application startup.
  * 
  * @param {string} [overrideUri] - Optional URI override (primarily for tests)
  * @returns {Promise<typeof mongoose>} Mongoose instance
  */
 const connectDB = async (overrideUri) => {
-  // 1. If connection is already open, return existing instance
-  if (mongoose.connection.readyState === 1) {
+  const hasExplicitOverride = overrideUri !== undefined && overrideUri !== null;
+  const requestedUri = hasExplicitOverride
+    ? overrideUri
+    : process.env.MONGO_URI || process.env.MONGODB_URI;
+  const readyState = mongoose.connection.readyState;
+
+  if (readyState === 1) {
+    if (!requestedUri) {
+      throw new Error(
+        "Cannot reuse the active MongoDB connection because no URI was supplied."
+      );
+    }
+    if (requestedUri !== connectionUri) {
+      throw new Error(
+        "MongoDB is already connected to a different or untracked URI; disconnect before requesting another connection."
+      );
+    }
     return mongoose;
   }
 
-  // 2. If connection is in the process of connecting, await the active promise
-  if (mongoose.connection.readyState === 2 && connectionPromise) {
+  if (readyState === 2 && connectionPromise) {
+    if (!requestedUri) {
+      throw new Error(
+        "Cannot reuse the in-flight MongoDB connection because no URI was supplied."
+      );
+    }
+    if (requestedUri !== inFlightUri) {
+      throw new Error(
+        "A MongoDB connection to a different URI is already in progress."
+      );
+    }
     return connectionPromise;
   }
 
-  const rawUri = overrideUri || process.env.MONGO_URI || process.env.MONGODB_URI;
-
-  if (!rawUri) {
-    const errorMsg =
-      "MongoDB connection failed: MONGO_URI is not defined in environment variables. " +
-      "Please set MONGO_URI in backend/.env.";
-    console.error(errorMsg);
-    throw new Error(errorMsg);
+  if (readyState === 2) {
+    throw new Error(
+      "A MongoDB connection is already in progress outside connectDB; refusing to reuse it."
+    );
   }
 
+  if (readyState === 3) {
+    throw new Error("MongoDB is disconnecting; retry after it has closed.");
+  }
+
+  const rawUri = requestedUri;
+
+  if (!rawUri) {
+    console.error("[Database] MongoDB connection URI is not configured.");
+    throw new Error("MONGO_URI is required to connect to MongoDB.");
+  }
+
+  connectionUri = null;
+  inFlightUri = rawUri;
   const targetDbName = "proofnest";
+  let connectionSucceeded = false;
+  let pendingConnection;
 
-  connectionPromise = (async () => {
+  pendingConnection = (async () => {
     try {
-      const conn = await mongoose.connect(rawUri, {
-        dbName: targetDbName,
-        autoIndex: process.env.NODE_ENV !== "production", // Build indexes automatically in non-prod
-        serverSelectionTimeoutMS: 8000,
-      });
+      const conn = await Promise.resolve().then(() =>
+        mongoose.connect(rawUri, {
+          dbName: targetDbName,
+          autoIndex:
+            process.env.NODE_ENV !== "production" &&
+            process.env.NODE_ENV !== "test",
+          serverSelectionTimeoutMS: 8000,
+        })
+      );
 
+      connectionSucceeded = true;
+      connectionUri = rawUri;
       const host = conn.connection.host || "unknown-host";
       const dbName = conn.connection.name || targetDbName;
       console.log(`[Database] MongoDB Atlas connected successfully: host=${host}, database=${dbName}`);
       return conn;
     } catch (error) {
-      // Resilience fallback: If Node c-ares DNS resolver returns querySrv EBADRESP on Windows,
-      // fallback to the direct Atlas replica set host seedlist
-      if (
-        (error.code === "EBADRESP" || error.message.includes("querySrv EBADRESP")) &&
-        rawUri.includes("proofnestcluster")
-      ) {
+      const isDnsSrvError =
+        error.code === "EBADRESP" ||
+        (typeof error.message === "string" &&
+          error.message.includes("querySrv EBADRESP"));
+      const mayUseAtlasFallback =
+        !hasExplicitOverride &&
+        process.env.NODE_ENV !== "test" &&
+        isDnsSrvError &&
+        isAllowedAtlasFallbackUri(rawUri);
+
+      if (mayUseAtlasFallback) {
         const credMatch = rawUri.match(/\/\/([^@]+)@/);
         if (credMatch) {
           const creds = credMatch[1];
@@ -86,34 +150,49 @@ const connectDB = async (overrideUri) => {
           try {
             const fallbackConn = await mongoose.connect(seedlistUri, {
               dbName: targetDbName,
-              autoIndex: process.env.NODE_ENV !== "production",
+              autoIndex:
+                process.env.NODE_ENV !== "production" &&
+                process.env.NODE_ENV !== "test",
               serverSelectionTimeoutMS: 8000,
             });
+            connectionSucceeded = true;
+            connectionUri = rawUri;
             const host = fallbackConn.connection.host || "unknown-host";
             const dbName = fallbackConn.connection.name || targetDbName;
             console.log(
               `[Database] MongoDB Atlas connected successfully via replica set seedlist: host=${host}, database=${dbName}`
             );
             return fallbackConn;
-          } catch (seedError) {
+          } catch {
             console.error(
-              `[Database] MongoDB seedlist connection error to [${sanitizeMongoUri(rawUri)}]: ${seedError.message}`
+              "[Database] MongoDB Atlas fallback connection failed; URI and credentials omitted."
             );
-            connectionPromise = null;
-            throw seedError;
+            throw new Error(
+              "MongoDB connection failed. Check connectivity and credentials."
+            );
           }
         }
       }
 
       console.error(
-        `[Database] MongoDB connection error to [${sanitizeMongoUri(rawUri)}]: ${error.message}`
+        "[Database] MongoDB connection failed; URI and credentials omitted."
       );
-      connectionPromise = null; // Reset promise so subsequent retries can proceed
-      throw error;
+      throw new Error(
+        "MongoDB connection failed. Check connectivity and credentials."
+      );
+    } finally {
+      if (connectionPromise === pendingConnection) {
+        connectionPromise = null;
+        inFlightUri = null;
+      }
+      if (!connectionSucceeded) {
+        connectionUri = null;
+      }
     }
   })();
 
-  return connectionPromise;
+  connectionPromise = pendingConnection;
+  return pendingConnection;
 };
 
 /**
@@ -121,9 +200,20 @@ const connectDB = async (overrideUri) => {
  * Useful for test suites and graceful server shutdown.
  */
 const disconnectDB = async () => {
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.disconnect();
-    connectionPromise = null;
+  const wasConnected = mongoose.connection.readyState !== 0;
+  try {
+    if (wasConnected) {
+      await mongoose.disconnect();
+    }
+  } finally {
+    if (mongoose.connection.readyState === 0) {
+      connectionPromise = null;
+      connectionUri = null;
+      inFlightUri = null;
+    }
+  }
+
+  if (wasConnected && mongoose.connection.readyState === 0) {
     console.log("[Database] MongoDB connection closed.");
   }
 };

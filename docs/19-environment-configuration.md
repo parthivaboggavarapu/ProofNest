@@ -18,7 +18,7 @@ To protect user confidentiality and prevent unauthorized access, ProofNest enfor
 | `NODE_ENV` | Yes | `development` | No | Operational environment (`development`, `test`, `production`). |
 | `PORT` | Yes | `4000` | No | Port on which the Express HTTP server listens. |
 | `FRONTEND_URL` | Yes | `http://localhost:5173` | No | Allowed CORS origin for credentials and cookies. |
-| `MONGODB_URI` | Yes | `mongodb://127.0.0.1:27017/proofnest` | **Yes** | MongoDB connection string including credentials. |
+| `MONGO_URI` | Yes | `mongodb://127.0.0.1:27017/proofnest` | **Yes** | MongoDB connection string including credentials. |
 | `JWT_ACCESS_SECRET` | Yes | `replace-with-long-random-access-secret` | **Yes** | Secret key for signing 15-minute JWT access tokens. |
 | `JWT_REFRESH_SECRET` | Yes | `replace-with-long-random-refresh-secret` | **Yes** | Secret key for signing 7-day JWT refresh tokens. |
 | `JWT_ACCESS_EXPIRES_IN` | No | `15m` | No | Expiration duration for access tokens. |
@@ -59,7 +59,7 @@ All frontend variables must be prefixed with `VITE_` to be recognized by Vite:
    ```bash
    cp backend/.env.example backend/.env
    ```
-   Open `backend/.env` and ensure `MONGODB_URI` points to your local MongoDB instance. Generate random secrets for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` (e.g. using `openssl rand -hex 32`).
+   Open `backend/.env` and ensure `MONGO_URI` points to your local MongoDB instance. Generate random secrets for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` (e.g. using `openssl rand -hex 32`) when implementing authentication.
 
 2. **Frontend Setup:**
    ```bash
@@ -68,5 +68,7 @@ All frontend variables must be prefixed with `VITE_` to be recognized by Vite:
    Confirm that `VITE_API_BASE_URL` matches the backend port (default: `http://localhost:4000`).
 
 3. **Validation on Boot:**
-   The backend `config/env.js` module validates all required variables using a schema check at server startup. If any required variable is missing or malformed, the process terminates immediately with an explanatory error log.
+   The backend `config/env.js` module validates the foundation variables `NODE_ENV`, `PORT`, `MONGO_URI`, and `FRONTEND_URL` at server startup. If any is missing or malformed, startup stops with an error that identifies the invalid variable without printing its value.
+
+The database connection module also accepts `MONGODB_URI` as a compatibility fallback, but the backend foundation uses `MONGO_URI` as the required canonical name.
 
