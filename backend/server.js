@@ -5,7 +5,7 @@ const createApp = require("./app");
 
 const listen = (app, port) =>
   new Promise((resolve, reject) => {
-    const server = app.listen(port);
+    const server = app.listen(port, "0.0.0.0");
     server.once("error", reject);
     server.once("listening", () => {
       server.removeListener("error", reject);
