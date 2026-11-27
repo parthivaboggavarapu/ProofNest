@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -21,20 +22,23 @@ const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 
 const createApp = (config = loadEnv(), dependencies = {}) => {
   const app = express();
+
   app.set(
     "trust proxy",
     config.TRUST_PROXY === undefined ? 0 : config.TRUST_PROXY
   );
+
   app.locals.environment = config.NODE_ENV;
   app.locals.sessionCookieName = SESSION_COOKIE_NAME;
   app.locals.sessionCookieOptions = {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: config.NODE_ENV === "production" ? "none" : "lax",
     secure: config.NODE_ENV === "production",
     path: "/",
   };
 
   app.use(helmet());
+
   app.use(
     cors({
       origin: (requestOrigin, callback) => {
@@ -47,6 +51,7 @@ const createApp = (config = loadEnv(), dependencies = {}) => {
       methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     })
   );
+
   app.use(createCsrfOriginGuard(config.FRONTEND_URL, SESSION_COOKIE_NAME));
   app.use(morgan(config.NODE_ENV === "production" ? "combined" : "dev"));
   app.use(express.json({ limit: "2mb" }));
@@ -54,7 +59,9 @@ const createApp = (config = loadEnv(), dependencies = {}) => {
 
   const sessionStoreFactory =
     dependencies.sessionStoreFactory || createSessionStore;
+
   const store = sessionStoreFactory({ ttl: SESSION_TTL_SECONDS });
+
   const sessionMiddleware = session({
     name: SESSION_COOKIE_NAME,
     secret: config.SESSION_SECRET,
@@ -79,15 +86,18 @@ const createApp = (config = loadEnv(), dependencies = {}) => {
         );
         return;
       }
+
       next();
     });
   });
 
   app.use("/api", healthRoutes);
+
   app.use(
     "/api/auth",
     createAuthRoutes({ UserModel: dependencies.UserModel })
   );
+
   app.use(notFound);
   app.use(errorHandler);
 
