@@ -5,9 +5,9 @@
 ## 1. Environment Variable Architecture & Safety
 
 To protect user confidentiality and prevent unauthorized access, ProofNest enforces strict environment boundaries:
-- **Zero Secrets Committed:** Real API keys, JWT secrets, and database connection strings are never committed to Git.
+- **Zero Secrets Committed:** Real API keys, session secrets, and database connection strings are never committed to Git.
 - **Example Templates:** `.env.example`, `backend/.env.example`, and `frontend/.env.example` contain placeholder values only.
-- **Frontend Isolation:** The frontend Vite application only receives variables prefixed with `VITE_`. Backend secrets (JWT keys, S3 credentials, LLM keys) are completely unreachable by browser code.
+- **Frontend Isolation:** The frontend Vite application only receives variables prefixed with `VITE_`. Backend secrets (session secret, storage credentials, LLM keys) are completely unreachable by browser code.
 
 ---
 
@@ -18,12 +18,9 @@ To protect user confidentiality and prevent unauthorized access, ProofNest enfor
 | `NODE_ENV` | Yes | `development` | No | Operational environment (`development`, `test`, `production`). |
 | `PORT` | Yes | `4000` | No | Port on which the Express HTTP server listens. |
 | `FRONTEND_URL` | Yes | `http://localhost:5173` | No | Allowed CORS origin for credentials and cookies. |
+| `TRUST_PROXY` | No | `0` | No | Number of trusted reverse-proxy hops (integer `0`–`10`); keep `0` unless a fixed proxy chain is configured. |
 | `MONGO_URI` | Yes | `mongodb://127.0.0.1:27017/proofnest` | **Yes** | MongoDB connection string including credentials. |
-| `JWT_ACCESS_SECRET` | Yes | `replace-with-long-random-access-secret` | **Yes** | Secret key for signing 15-minute JWT access tokens. |
-| `JWT_REFRESH_SECRET` | Yes | `replace-with-long-random-refresh-secret` | **Yes** | Secret key for signing 7-day JWT refresh tokens. |
-| `JWT_ACCESS_EXPIRES_IN` | No | `15m` | No | Expiration duration for access tokens. |
-| `JWT_REFRESH_EXPIRES_IN` | No | `7d` | No | Expiration duration for refresh tokens. |
-| `COOKIE_SECURE` | Yes | `false` (dev) / `true` (prod) | No | Sets `Secure` flag on httpOnly cookies (requires HTTPS). |
+| `SESSION_SECRET` | Yes | Unique random value, at least 32 characters | **Yes** | Signs MongoDB-backed server-side session cookies. |
 | `STORAGE_PROVIDER` | Yes | `local` | No | File storage adapter (`local` or `s3_compatible`). |
 | `STORAGE_LOCAL_DIR` | If local | `./uploads` | No | Directory path for local file storage in development. |
 | `STORAGE_BUCKET` | If s3 | `proofnest-documents` | No | S3 / Cloudflare R2 bucket name. |
@@ -59,7 +56,7 @@ All frontend variables must be prefixed with `VITE_` to be recognized by Vite:
    ```bash
    cp backend/.env.example backend/.env
    ```
-   Open `backend/.env` and ensure `MONGO_URI` points to your local MongoDB instance. Generate random secrets for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` (e.g. using `openssl rand -hex 32`) when implementing authentication.
+   Open `backend/.env`, ensure `MONGO_URI` points to your development MongoDB instance, and replace `SESSION_SECRET` with a unique random value of at least 32 characters. Never reuse the example value.
 
 2. **Frontend Setup:**
    ```bash
@@ -68,7 +65,11 @@ All frontend variables must be prefixed with `VITE_` to be recognized by Vite:
    Confirm that `VITE_API_BASE_URL` matches the backend port (default: `http://localhost:4000`).
 
 3. **Validation on Boot:**
-   The backend `config/env.js` module validates the foundation variables `NODE_ENV`, `PORT`, `MONGO_URI`, and `FRONTEND_URL` at server startup. If any is missing or malformed, startup stops with an error that identifies the invalid variable without printing its value.
+   The backend `config/env.js` module validates `NODE_ENV`, `PORT`, `MONGO_URI`, `FRONTEND_URL`, and `SESSION_SECRET` at server startup. If any is missing or malformed, startup stops with an error that identifies the invalid variable without printing its value.
 
 The database connection module also accepts `MONGODB_URI` as a compatibility fallback, but the backend foundation uses `MONGO_URI` as the required canonical name.
+
+Authentication uses HTTP-only, `SameSite=Lax` cookies with `Secure` enabled in production. When TLS terminates at a reverse proxy, configure Express to trust only the known proxy hop(s). Cross-origin frontend requests must use `credentials: "include"` with `fetch` or `withCredentials: true` with Axios.
+
+State-changing API requests require an `Origin` matching `FRONTEND_URL`. An originless request is permitted only for a non-browser `application/json` client with no Fetch Metadata headers and no ProofNest session cookie; CORS alone is not CSRF protection.
 

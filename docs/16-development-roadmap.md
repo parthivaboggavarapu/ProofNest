@@ -39,10 +39,10 @@ Demo & Docs  Deploy       Testing      Integration AI Assist   Repairs     Deadl
 - **Deliverables:** Complete schema files with validation tests.
 
 ### Phase 4: Authentication & Backend Foundation
-- **Objective:** Implement user registration, login, logout, password hashing, and JWT cookie management.
-- **Tasks:** Implement `authRoutes.js`, `authController.js`, `authMiddleware.js`, bcrypt hashing, and rate limiting.
+- **Objective:** Implement user registration, login, logout, password hashing, and MongoDB-backed session cookies.
+- **Tasks:** Implement `authRoutes.js`, `authController.js`, session authentication middleware, bcrypt hashing, Origin-based CSRF protection, and rate limiting.
 - **Lead:** Member 4 (Backend Developer).
-- **Deliverables:** Working auth endpoints returning httpOnly cookies.
+- **Deliverables:** Completed authentication endpoints using regenerated server-side sessions and `HttpOnly` cookies.
 
 ### Phase 5: Personal Asset Inventory Module
 - **Objective:** Build complete CRUD and search capabilities for products.

@@ -26,7 +26,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const BCRYPT_ROUNDS = 10;
+const BCRYPT_ROUNDS = 12;
 
 const userSchema = new mongoose.Schema(
   {

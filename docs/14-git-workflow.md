@@ -87,6 +87,6 @@ Before any PR is merged into `main`, the author and reviewer must verify:
 ## 5. Prohibited Git Actions
 1. **Never force-push to `main` (`git push --force`).**
 2. **Never amend already pushed commits on `main`.**
-3. **Never commit untracked `.env` files, JWT secrets, or cloud credentials.**
+3. **Never commit untracked `.env` files, session secrets, or cloud credentials.**
 4. **Never merge a PR with failing test suites.**
 

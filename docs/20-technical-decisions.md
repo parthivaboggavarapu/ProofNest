@@ -42,21 +42,22 @@ Accepted.
 
 ---
 
-## ADR-003: JWT Storage in httpOnly Cookies vs. LocalStorage
+## ADR-003: MongoDB-Backed Sessions vs. Browser Token Storage
 
 ### Context
-Browser Single Page Applications commonly store authentication tokens in `localStorage`. However, `localStorage` is completely accessible to any JavaScript running in the page context, making it critically vulnerable to Cross-Site Scripting (XSS) attacks.
+ProofNest requires browser authentication with persistent sessions and server-side revocation. Browser-readable token storage would expose credentials to JavaScript running in the page context.
 
 ### Decision
-Store JWT access and refresh tokens exclusively in **`httpOnly`, `SameSite=Lax`, `Secure` cookies**.
+Use `express-session` with the existing MongoDB-backed `connect-mongo` session store. Store only the session identifier in the `proofnest.sid` cookie, configured as `HttpOnly`, `SameSite=Lax`, seven days, and `Secure` in production. Regenerate the session after login and destroy it on logout. Enforce the configured frontend `Origin` on state-changing requests; allow originless requests only for non-browser JSON clients without a session cookie or Fetch Metadata headers.
 
 ### Consequences
-- Zero token exposure to client-side scripts.
-- Cross-Site Request Forgery (CSRF) mitigated via `SameSite=Lax` and CORS origin restriction.
-- Requires configuring `credentials: 'include'` / `withCredentials: true` on frontend HTTP clients.
+- Session identifiers are not readable by client-side scripts and sessions can be revoked server-side.
+- `SameSite=Lax` is defense in depth; the Origin check is the CSRF control. CORS alone does not prevent CSRF.
+- Frontend HTTP clients must use `credentials: 'include'` / `withCredentials: true`.
+- Production deployments must configure `TRUST_PROXY` only for the known reverse-proxy hop count when TLS terminates upstream.
 
 ### Status
-Accepted.
+Accepted and implemented.
 
 ---
 

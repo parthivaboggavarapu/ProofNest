@@ -107,7 +107,8 @@ jobs:
 
       - name: Secret Leak Prevention Check
         run: |
-          if grep -rn "JWT_ACCESS_SECRET=" backend/src/; then
+          tracked_env_files=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '\.env\.example$' || true)
+          if [ -n "$tracked_env_files" ]; then
             echo "Error: Hardcoded secrets detected!"
             exit 1
           fi

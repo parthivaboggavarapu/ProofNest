@@ -66,7 +66,7 @@ ProofNest transforms physical ownership into structured, actionable digital asse
 
 | Metric Category | Target Standard | Architectural Measure |
 | :--- | :--- | :--- |
-| **Data Isolation** | 100% Strict Tenant Boundary | Every database query and file access check is scoped by `userId` extracted from secure JWT cookies. |
+| **Data Isolation** | 100% Strict Tenant Boundary | Every database query and file access check is scoped by `userId` from the authenticated MongoDB-backed session. |
 | **Data Integrity** | Zero Unverified OCR Data | Extracted data remains in `review_required` state until explicitly confirmed by `POST /api/documents/:id/confirm`. |
 | **Calculation Accuracy** | 100% Deterministic Totals | Repair expense totals are computed via MongoDB aggregation pipelines over stored repair records, never manual counters. |
 | **AI Grounding** | Zero Fabricated Facts | LLM context is strictly populated with authorized user records; if data is missing, the assistant explicitly reports absence. |

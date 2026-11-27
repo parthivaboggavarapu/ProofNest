@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const http = require("node:http");
 const test = require("node:test");
 const mongoose = require("mongoose");
+const { Store } = require("express-session");
 const createApp = require("../app");
 const errorHandler = require("../middleware/errorHandler");
 const AppError = require("../utils/AppError");
@@ -14,7 +15,28 @@ const config = {
   PORT: 4000,
   MONGO_URI: "mongodb://127.0.0.1:27017/proofnest_test",
   FRONTEND_URL: "http://localhost:5173",
+  SESSION_SECRET: "foundation-test-session-secret-0123456789",
+  TRUST_PROXY: 0,
 };
+
+class NoopSessionStore extends Store {
+  get(sessionId, callback) {
+    callback(null, null);
+  }
+
+  set(sessionId, sessionData, callback) {
+    if (callback) callback(null);
+  }
+
+  destroy(sessionId, callback) {
+    if (callback) callback(null);
+  }
+}
+
+const createTestApp = (appConfig = config) =>
+  createApp(appConfig, {
+    sessionStoreFactory: () => new NoopSessionStore(),
+  });
 
 const withMockedDatabaseConnection = async (run) => {
   const originalConnect = mongoose.connect;
@@ -107,14 +129,45 @@ test("rejects malformed ports and non-origin frontend URLs", () => {
   );
 });
 
+test("requires a sufficiently long session secret", () => {
+  assert.throws(
+    () => validateEnv({ ...config, SESSION_SECRET: "too-short" }),
+    (error) => error.name === "EnvironmentValidationError"
+  );
+});
+
+test("validates TRUST_PROXY as a bounded hop count and defaults to zero", () => {
+  const validConfig = { ...config, PORT: "4000" };
+  delete validConfig.TRUST_PROXY;
+  assert.equal(validateEnv(validConfig).TRUST_PROXY, 0);
+  assert.equal(
+    validateEnv({ ...validConfig, TRUST_PROXY: "2" }).TRUST_PROXY,
+    2
+  );
+  assert.throws(
+    () => validateEnv({ ...validConfig, TRUST_PROXY: "true" }),
+    (error) => error.name === "EnvironmentValidationError"
+  );
+  assert.throws(
+    () => validateEnv({ ...validConfig, TRUST_PROXY: "11" }),
+    (error) => error.name === "EnvironmentValidationError"
+  );
+});
+
 test("initializes the Express application with the configured environment", () => {
-  const app = createApp(config);
+  const app = createTestApp();
   assert.equal(typeof app, "function");
   assert.equal(app.locals.environment, "test");
+  assert.equal(app.get("trust proxy"), 0);
+});
+
+test("configures Express with the validated trust-proxy hop count", () => {
+  const app = createTestApp({ ...config, TRUST_PROXY: 2 });
+  assert.equal(app.get("trust proxy"), 2);
 });
 
 test("health endpoint reports app, time, environment, and MongoDB status", async () => {
-  const response = await request(createApp(config), { path: "/api/health" });
+  const response = await request(createTestApp(), { path: "/api/health" });
   const payload = JSON.parse(response.body);
 
   assert.equal(response.statusCode, 200);
@@ -127,7 +180,7 @@ test("health endpoint reports app, time, environment, and MongoDB status", async
 });
 
 test("unknown routes return the standard 404 response", async () => {
-  const response = await request(createApp(config), { path: "/api/missing" });
+  const response = await request(createTestApp(), { path: "/api/missing" });
   const payload = JSON.parse(response.body);
 
   assert.equal(response.statusCode, 404);
@@ -136,7 +189,7 @@ test("unknown routes return the standard 404 response", async () => {
 });
 
 test("invalid JSON returns a consistent client error", async () => {
-  const response = await request(createApp(config), {
+  const response = await request(createTestApp(), {
     method: "POST",
     path: "/api/health",
     headers: { "content-type": "application/json" },
@@ -250,7 +303,7 @@ test("production application errors with server status are also sanitized", () =
 });
 
 test("CORS allows the configured frontend origin with credentials", async () => {
-  const response = await request(createApp(config), {
+  const response = await request(createTestApp(), {
     method: "OPTIONS",
     path: "/api/health",
     headers: {
@@ -265,7 +318,7 @@ test("CORS allows the configured frontend origin with credentials", async () => 
 });
 
 test("CORS does not grant access to an unconfigured origin", async () => {
-  const response = await request(createApp(config), {
+  const response = await request(createTestApp(), {
     path: "/api/health",
     headers: { origin: "https://untrusted.example" },
   });

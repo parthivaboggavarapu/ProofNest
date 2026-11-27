@@ -11,7 +11,13 @@ const loadEnv = () => {
 
 const validateEnv = (source) => {
   const errors = [];
-  const required = ["NODE_ENV", "PORT", "MONGO_URI", "FRONTEND_URL"];
+  const required = [
+    "NODE_ENV",
+    "PORT",
+    "MONGO_URI",
+    "FRONTEND_URL",
+    "SESSION_SECRET",
+  ];
 
   for (const name of required) {
     if (typeof source[name] !== "string" || source[name].trim() === "") {
@@ -47,6 +53,44 @@ const validateEnv = (source) => {
       field: "MONGO_URI",
       message: "MONGO_URI must be a MongoDB connection URI",
     });
+  }
+
+  const sessionSecret = source.SESSION_SECRET;
+  if (
+    typeof sessionSecret === "string" &&
+    sessionSecret.trim() !== "" &&
+    sessionSecret.length < 32
+  ) {
+    errors.push({
+      field: "SESSION_SECRET",
+      message: "SESSION_SECRET must be at least 32 characters long",
+    });
+  }
+
+  const trustProxyValue = source.TRUST_PROXY;
+  let trustProxy = 0;
+  if (trustProxyValue !== undefined && trustProxyValue !== null) {
+    if (typeof trustProxyValue !== "string") {
+      errors.push({
+        field: "TRUST_PROXY",
+        message: "TRUST_PROXY must be a hop count between 0 and 10",
+      });
+    } else if (trustProxyValue.trim() !== "") {
+      if (!/^(0|[1-9]\d*)$/.test(trustProxyValue.trim())) {
+        errors.push({
+          field: "TRUST_PROXY",
+          message: "TRUST_PROXY must be a hop count between 0 and 10",
+        });
+      } else {
+        trustProxy = Number(trustProxyValue.trim());
+        if (trustProxy > 10) {
+          errors.push({
+            field: "TRUST_PROXY",
+            message: "TRUST_PROXY must be a hop count between 0 and 10",
+          });
+        }
+      }
+    }
   }
 
   const frontendUrl = source.FRONTEND_URL && source.FRONTEND_URL.trim();
@@ -88,6 +132,8 @@ const validateEnv = (source) => {
     PORT: port,
     MONGO_URI: mongoUri,
     FRONTEND_URL: new URL(frontendUrl).origin,
+    SESSION_SECRET: sessionSecret,
+    TRUST_PROXY: trustProxy,
   });
 };
 
