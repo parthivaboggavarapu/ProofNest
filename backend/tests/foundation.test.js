@@ -166,18 +166,20 @@ test("configures Express with the validated trust-proxy hop count", () => {
   assert.equal(app.get("trust proxy"), 2);
 });
 
+
 test("health endpoint reports app, time, environment, and MongoDB status", async () => {
   const response = await request(createTestApp(), { path: "/api/health" });
   const payload = JSON.parse(response.body);
 
-  assert.equal(response.statusCode, 200);
-  assert.equal(payload.success, true);
-  assert.equal(payload.data.status, "ok");
+  assert.equal(response.statusCode, 503);
+  assert.equal(payload.success, false);
+  assert.equal(payload.data.status, "unhealthy");
   assert.equal(payload.data.environment, "test");
   assert.equal(payload.data.mongodb, "disconnected");
   assert.equal(Number.isNaN(Date.parse(payload.data.timestamp)), false);
   assert.equal(JSON.stringify(payload).includes(config.MONGO_URI), false);
 });
+
 
 test("unknown routes return the standard 404 response", async () => {
   const response = await request(createTestApp(), { path: "/api/missing" });
@@ -317,15 +319,17 @@ test("CORS allows the configured frontend origin with credentials", async () => 
   assert.equal(response.headers["access-control-allow-credentials"], "true");
 });
 
+
 test("CORS does not grant access to an unconfigured origin", async () => {
   const response = await request(createTestApp(), {
     path: "/api/health",
     headers: { origin: "https://untrusted.example" },
   });
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 503);
   assert.equal(response.headers["access-control-allow-origin"], undefined);
 });
+
 
 test("rejects a different URI when MongoDB is already connected", async () => {
   await withMockedDatabaseConnection(async () => {

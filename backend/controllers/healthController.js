@@ -14,13 +14,16 @@ const getMongoStatus = () => {
 };
 
 const getHealth = (req, res) => {
-  res.status(200).json({
-    success: true,
+  const mongodb = getMongoStatus();
+  const isHealthy = mongodb === "connected";
+
+  res.status(isHealthy ? 200 : 503).json({
+    success: isHealthy,
     data: {
-      status: "ok",
+      status: isHealthy ? "ok" : "unhealthy",
       timestamp: new Date().toISOString(),
       environment: req.app.locals.environment,
-      mongodb: getMongoStatus(),
+      mongodb,
     },
   });
 };
