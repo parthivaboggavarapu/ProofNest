@@ -404,14 +404,14 @@ test("logs out and invalidates the server-side session", async () => {
   assert.equal(sessionStore.sessions.size, 0);
 });
 
-test("sets secure session cookies in production", () => {
+test("sets secure cross-site session cookies in production", () => {
   const context = createAuthTestContext({
     config: { NODE_ENV: "production" },
   });
 
   assert.equal(context.app.locals.sessionCookieOptions.secure, true);
   assert.equal(context.app.locals.sessionCookieOptions.httpOnly, true);
-  assert.equal(context.app.locals.sessionCookieOptions.sameSite, "lax");
+  assert.equal(context.app.locals.sessionCookieOptions.sameSite, "none");
 });
 
 test("role middleware rejects unauthenticated and unauthorized requests", () => {
