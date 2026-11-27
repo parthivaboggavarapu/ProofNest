@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test tests/foundation.test.js",
+    "test": "node --test tests/foundation.test.js tests/auth.test.js",
     "test:db": "node tests/database.test.js",
     "test:atlas": "node tests/verifyAtlasConnection.js"
   },
@@ -17,9 +17,10 @@
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.5",
+    "express-session": "^1.19.0",
     "helmet": "^8.1.0",
     "mongoose": "^9.0.2",
     "morgan": "^1.10.1"
   }
 }
-

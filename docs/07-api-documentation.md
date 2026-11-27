@@ -10,9 +10,9 @@
 - **Content-Type:** `application/json` (except file uploads using `multipart/form-data`)
 
 ### 1.2 Authentication & Credentials
-- All protected endpoints require a valid JWT token.
-- Tokens are transmitted via secure, `httpOnly`, `SameSite=Lax` cookies named `proofnest_access_token` and `proofnest_refresh_token`.
-- Frontend clients configure HTTP libraries with `withCredentials: true`.
+- Protected endpoints require a valid server-side session stored in MongoDB.
+- The session identifier is sent in the signed `proofnest.sid` cookie (`HttpOnly`, `SameSite=Lax`, seven-day expiry, and `Secure` in production).
+- Frontend clients must send cookies using `fetch` `credentials: "include"` or Axios `withCredentials: true`.
 
 ### 1.3 Standard Response Format
 All JSON responses follow a consistent envelope structure:
@@ -52,7 +52,7 @@ All JSON responses follow a consistent envelope structure:
 - `201 Created`: Resource successfully created.
 - `204 No Content`: Resource deleted or action completed without return body.
 - `400 Bad Request`: Malformed JSON or syntax failure.
-- `401 Unauthorized`: Missing or invalid authentication token.
+- `401 Unauthorized`: Missing or invalid authentication session or credentials.
 - `403 Forbidden`: Authenticated user does not have permission for the resource.
 - `404 Not Found`: Resource does not exist or does not belong to the user.
 - `413 Payload Too Large`: Upload exceeds the 10 MB limit.
@@ -71,12 +71,13 @@ All JSON responses follow a consistent envelope structure:
 - **Request Body:**
   ```json
   {
+    "name": "Jane Doe",
     "email": "user@example.com",
-    "password": "SecurePassword123!",
-    "fullName": "Jane Doe",
-    "preferredCurrency": "USD"
+    "password": "SecurePassword123!"
   }
   ```
+  Passwords must contain at least 6 characters and no more than 72 UTF-8 bytes.
+  Any supplied `role` is ignored; newly registered users receive the `user` role.
 - **Response (201 Created):**
   ```json
   {
@@ -85,8 +86,9 @@ All JSON responses follow a consistent envelope structure:
       "user": {
         "id": "65a000000000000000000002",
         "email": "user@example.com",
-        "fullName": "Jane Doe",
-        "preferredCurrency": "USD"
+        "name": "Jane Doe",
+        "email": "user@example.com",
+        "role": "user"
       }
     }
   }
@@ -104,7 +106,7 @@ All JSON responses follow a consistent envelope structure:
   }
   ```
 - **Response (200 OK):**
-  Sets `proofnest_access_token` and `proofnest_refresh_token` in cookies.
+  Regenerates the session to prevent fixation and sets the `proofnest.sid` cookie.
   ```json
   {
     "success": true,
@@ -112,8 +114,9 @@ All JSON responses follow a consistent envelope structure:
       "user": {
         "id": "65a000000000000000000002",
         "email": "user@example.com",
-        "fullName": "Jane Doe",
-        "preferredCurrency": "USD"
+        "name": "Jane Doe",
+        "email": "user@example.com",
+        "role": "user"
       }
     }
   }
@@ -122,12 +125,12 @@ All JSON responses follow a consistent envelope structure:
 ### 2.3 Logout User
 - **Method:** `POST`
 - **URL:** `/api/auth/logout`
-- **Auth Required:** Yes
-- **Response (200 OK):** Clears authentication cookies.
+- **Auth Required:** No; destroys the current session when present.
+- **Response (200 OK):** Destroys the server-side session and clears the session cookie.
   ```json
   {
     "success": true,
-    "data": { "message": "Successfully logged out." }
+    "data": { "message": "Logged out successfully" }
   }
   ```
 
@@ -143,13 +146,9 @@ All JSON responses follow a consistent envelope structure:
       "user": {
         "id": "65a000000000000000000002",
         "email": "user@example.com",
-        "fullName": "Jane Doe",
-        "preferredCurrency": "USD",
-        "notificationPreferences": {
-          "emailAlerts": false,
-          "inAppAlerts": true,
-          "reminderDays": [30, 7, 1]
-        }
+        "name": "Jane Doe",
+        "email": "user@example.com",
+        "role": "user"
       }
     }
   }

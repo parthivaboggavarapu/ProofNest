@@ -43,7 +43,7 @@ sequenceDiagram
 
   User->>FE: Types question: "How much have I spent repairing my phone?"
   FE->>API: POST /api/assistant/ask { query, conversationId }
-  API->>Auth: Verify JWT cookie & extract userId
+  API->>Auth: Verify MongoDB-backed session & load userId
   Auth-->>API: Authorized (userId)
 
   API->>AI: processQuery(query, userId, conversationId)

@@ -7,7 +7,7 @@
 ProofNest is built upon a decoupled, layered client-server architecture designed for high maintainability, strict security, and tenant isolation:
 
 - **Client Layer:** React 18 Single Page Application (SPA) bundled with Vite and styled with Tailwind CSS. It communicates with the backend solely via HTTPS REST APIs using standard JSON payloads and multipart file uploads.
-- **API & Application Gateway:** Express.js REST API providing rate limiting, security headers (Helmet), cookie parsing, JWT authentication, and request validation.
+- **API & Application Gateway:** Express.js REST API providing rate limiting, security headers (Helmet), Origin-based CSRF checks, MongoDB-backed `express-session` authentication, and request validation.
 - **Domain Service Layer:** Object-Oriented service classes encapsulating business logic (`ProductService`, `WarrantyTracker`, `RepairHistoryManager`, `DocumentExtractor`, `DeadlineService`, `NotificationService`, `AiRetrievalService`, `DashboardService`).
 - **Data Persistence Layer:** MongoDB document database accessed through Mongoose ODM, enforcing schemas, indexes, and relationship constraints.
 - **Integration Layer:** Adapter interfaces abstracting physical file storage (local filesystem or cloud S3/R2), OCR document extraction engines, and LLM providers.
@@ -34,7 +34,7 @@ flowchart TD
   end
 
   subgraph BackendServer["Backend Application Server (Node.js & Express)"]
-    AuthMW["JWT Auth & Ownership Verification Middleware"]
+    AuthMW["Session Auth & Ownership Verification Middleware"]
     APIRouter["Express REST API Router (/api/v1)"]
     
     subgraph ServiceDomain["OOP Domain Services"]
@@ -99,13 +99,14 @@ flowchart TD
 
 ### 3.2 Gateway & Routing Layer (Backend)
 - **Middleware Pipeline:**
-  1. `cors()` configured to accept only the designated `FRONTEND_URL` with credentials allowed.
-  2. `helmet()` setting secure HTTP headers (`X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`).
-  3. `express-rate-limit` protecting authentication endpoints against brute force and AI endpoints against abuse.
-  4. `cookieParser()` parsing encrypted authentication cookies.
-  5. `authenticateToken` middleware verifying JWT signatures and attaching `req.user` (`{ id, email }`).
-  6. Express JSON body parser with strict 2 MB payload limits for non-upload endpoints.
-  7. Multer middleware configured for multipart/form-data upload validation (10 MB cap, MIME filter).
+  1. `helmet()` setting security headers.
+  2. `cors()` allowing the configured `FRONTEND_URL` with credentials.
+  3. Origin CSRF middleware validating every state-changing request; CORS alone is not CSRF protection.
+  4. Request logging and JSON / URL-encoded body parsing with strict 2 MB payload limits.
+  5. `express-session` using the existing MongoDB `connect-mongo` store.
+  6. Route-level authentication middleware loading the user from MongoDB and attaching safe `req.user` information.
+  7. `express-rate-limit` protecting registration and login endpoints.
+  8. Future upload routes will add multipart validation (10 MB cap, MIME filter).
 
 ### 3.3 Domain Service Layer (OOP Architecture)
 Business logic is strictly decoupled from Express request/response handlers. Controllers validate HTTP inputs and delegate business workflows to specialized singleton service classes:

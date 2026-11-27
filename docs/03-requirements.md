@@ -46,7 +46,7 @@
 
 ### Module 6: User Authentication & Tenant Isolation (FR-SEC)
 - **FR-SEC-01 (User Registration & Login):** Users must register with a unique email and secure password. Passwords must be hashed using bcrypt (cost factor >= 12).
-- **FR-SEC-02 (Token Authentication):** Authentication must be maintained using JWT access tokens (15-minute expiration) and refresh tokens (7-day expiration) delivered via `httpOnly`, `SameSite=Lax`, `Secure` cookies.
+- **FR-SEC-02 (Session Authentication):** Authentication is maintained by `express-session` with server-side sessions stored in MongoDB through `connect-mongo`. Login regenerates the session; logout destroys it. The signed `proofnest.sid` cookie is `HttpOnly`, `SameSite=Lax`, seven days, and `Secure` in production. State-changing requests require the configured trusted `Origin`; originless JSON requests are allowed only for non-browser clients without a session cookie or Fetch Metadata headers.
 - **FR-SEC-03 (Strict Data Isolation):** Every database read, write, update, and delete operation across all entities must enforce `userId === req.user.id`.
 
 ---
@@ -77,7 +77,7 @@
 | 4. Smart Deadline Calendar (warranties, return windows, maintenance, in-app notifications)         |
 | 5. Repair History Journal & dynamic lifetime repair cost aggregation                               |
 | 6. Grounded AI Assistant querying verified user records with source citations                      |
-| 7. Secure JWT Authentication with httpOnly cookies and complete tenant isolation                   |
+| 7. Secure MongoDB-backed session authentication, CSRF Origin checks, and tenant isolation          |
 +----------------------------------------------------------------------------------------------------+
 
 +----------------------------------------------------------------------------------------------------+

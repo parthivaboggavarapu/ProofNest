@@ -15,10 +15,10 @@ To prevent sprawling, unmaintainable route handlers, business logic is strictly 
 +-------------------------------------------------------------------------+
 |                           HTTP REQUEST PIPELINE                         |
 +-------------------------------------------------------------------------+
-| 1. Security & Edge Middleware (Helmet, CORS, RateLimiter, CookieParser)  |
-| 2. Authentication Middleware (Verify JWT, Attach req.user)              |
-| 3. Input Validation Middleware (Express-Validator schemas)              |
-| 4. Express Route Handlers & Controllers                                 |
+| 1. Security & Edge Middleware (Helmet, CORS, Origin CSRF, RateLimiter)   |
+| 2. MongoDB-backed express-session middleware                            |
+| 3. Authentication Middleware (Load session user, attach safe req.user)  |
+| 4. Input Validation Middleware and Express route handlers               |
 +-------------------------------------------------------------------------+
                                      │
                                      ▼

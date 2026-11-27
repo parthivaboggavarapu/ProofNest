@@ -22,7 +22,7 @@ To successfully deliver ProofNest across its 14 roadmap phases, responsibilities
 |   - Feature pages: Product inventory, detail views, extraction review modal, AI chat.   |
 |                                                                                         |
 | Member 4: Backend Developer                                                             |
-|   - Express server, REST endpoints, JWT auth, middleware, OOP domain services.          |
+|   - Express server, REST endpoints, MongoDB-backed session auth, middleware, services. |
 |                                                                                         |
 | Member 5: Database Developer                                                            |
 |   - MongoDB Mongoose schemas, indexes, queries, aggregation pipelines, data integrity.  |

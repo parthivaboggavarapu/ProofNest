@@ -40,7 +40,7 @@ sequenceDiagram
 
   User->>FE: Select invoice file & click "Upload & Extract"
   FE->>API: POST /api/documents/upload (multipart/form-data)
-  API->>Auth: Verify JWT cookie & extract userId
+  API->>Auth: Verify MongoDB-backed session & load userId
   Auth-->>API: Authorized (userId)
   API->>API: Validate file extension, MIME type, size (<10MB)
   API->>Store: saveFile(fileStream, sanitizedKey)
