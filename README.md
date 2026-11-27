@@ -4,7 +4,7 @@
 
 ProofNest is a full-stack web application for personal product-record management. It connects purchase details, invoices, warranties, manuals, return deadlines, maintenance schedules, repair history, and expenses to each product a user owns.
 
-This repository is currently in the **project blueprint phase**. Application source code has not been implemented. The documentation in [`docs/`](docs/) is the implementation contract for a six-member team.
+The repository contains the project blueprint, the MongoDB data layer, and an initial Express backend foundation. Product APIs, authentication, file/OCR processing, reminders, AI, and the frontend application are not implemented yet. The documentation in [`docs/`](docs/) remains the intended product/API contract.
 
 ## What ProofNest is
 
@@ -47,8 +47,9 @@ Details and rejected alternatives live in [`docs/20-technical-decisions.md`](doc
 ## Current repository status
 
 - **Commit 1:** initial README placeholder.
-- **Commit 2 (this blueprint):** architecture, data model, API contracts, UI/UX, security, team plan, and file map.
-- **Not started:** application implementation, real credentials, deployed environments.
+- **Blueprint:** architecture, data model, API contracts, UI/UX, security, team plan, and file map.
+- **Implemented foundation:** MongoDB connection/models and an Express health-check server.
+- **Not implemented:** feature APIs, authentication, frontend application, and deployed environments.
 
 Do not treat any planned file in [`PROJECT_FILE_MAP.md`](PROJECT_FILE_MAP.md) as already implemented.
 
@@ -81,17 +82,16 @@ proofnest/
   .github/       CI workflow plans
 ```
 
-Frontend and backend folders currently contain README and environment examples only.
+The backend contains the MongoDB layer and Express foundation. The frontend still contains only its README and environment example.
 
-## Local setup (after Phase 2)
+## Local backend setup
 
-Phase 2 will add `frontend/package.json` and `backend/package.json`. Until then, do not expect the app to run.
+1. Copy `backend/.env.example` to `backend/.env` and provide a development `MONGO_URI`.
+2. Run `npm install --prefix backend`.
+3. Run `npm --prefix backend run dev` or `npm --prefix backend start`.
+4. Check `http://localhost:4000/api/health`.
 
-Required later:
-
-1. Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env`.
-2. Provide a MongoDB URI and secrets locally. Never commit them.
-3. Run the API and the Vite dev server as documented in [`docs/19-environment-configuration.md`](docs/19-environment-configuration.md).
+The frontend package and feature APIs are not implemented yet. See [`docs/19-environment-configuration.md`](docs/19-environment-configuration.md) for the planned environment configuration.
 
 ## Team
 
