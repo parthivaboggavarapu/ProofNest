@@ -1,5 +1,53 @@
 const mongoose = require('mongoose');
 
+/**
+ * MongoDB Atlas Vector Search Index Definition
+ * Collection: documentchunks
+ * Index Name: vector_index
+ * 
+ * Atlas Vector Search JSON definition:
+ * {
+ *   "fields": [
+ *     {
+ *       "type": "vector",
+ *       "path": "embedding",
+ *       "numDimensions": 384,
+ *       "similarity": "cosine"
+ *     },
+ *     {
+ *       "type": "filter",
+ *       "path": "userId"
+ *     },
+ *     {
+ *       "type": "filter",
+ *       "path": "productId"
+ *     }
+ *   ]
+ * }
+ */
+const VECTOR_INDEX_DEFINITION = {
+  name: 'vector_index',
+  type: 'vectorSearch',
+  definition: {
+    fields: [
+      {
+        type: 'vector',
+        path: 'embedding',
+        numDimensions: 384,
+        similarity: 'cosine'
+      },
+      {
+        type: 'filter',
+        path: 'userId'
+      },
+      {
+        type: 'filter',
+        path: 'productId'
+      }
+    ]
+  }
+};
+
 const documentChunkSchema = new mongoose.Schema(
   {
     userId: {
@@ -43,4 +91,6 @@ documentChunkSchema.index({ userId: 1, documentId: 1 });
 documentChunkSchema.index({ userId: 1, productId: 1 });
 
 const DocumentChunk = mongoose.models.DocumentChunk || mongoose.model('DocumentChunk', documentChunkSchema);
+DocumentChunk.VECTOR_INDEX_DEFINITION = VECTOR_INDEX_DEFINITION;
+
 module.exports = DocumentChunk;
